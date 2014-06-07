@@ -20,6 +20,13 @@ instance Monad Parser where
   return v = Parser p where
        p _ = Ok v ""
 
+instance Functor Parser where
+  fmap f (Parser p) = (Parser newP) where
+            newP cs = case p cs of
+                        (Ok r s) -> Ok (f r) s
+                        _ -> Fail
+
+
 both :: Parser a -> Parser a -> Parser a
 both p1 p2 = Parser p where
       p cs = case parse p1 cs
@@ -40,6 +47,13 @@ seq p1 p2 = (Parser p) where
                              Fail -> Fail
               Fail -> Fail
 
+zeroMany :: Parser a -> Parser [a]
+zeroMany p = (Parser pa) where
+  pa init = loop [] init
+  loop acc cs = case parse p cs of
+                 Fail -> Ok (reverse acc) cs
+                 (Ok c rest) -> loop (c:acc) rest
+
 notEmpty :: Parser Char
 notEmpty = Parser p where
      p s = case s
@@ -52,7 +66,16 @@ charTest f = both notEmpty (Parser p) where
              then Fail
              else Ok (head s) (tail s)
 
+lift :: Parser a -> Parser [a]
+lift p = fmap (\r -> [r]) p
+
 numeric = charTest isDigit
 alpha = charTest isAlpha
 alphaNumeric = charTest isAlphaNum
 whitespace = charTest isSpace 
+
+symbolSeq = fmap concat $ seq (lift alpha) (zeroMany alphaNumeric)
+
+data Ast = Symbol String deriving (Show)
+
+symbol = fmap Symbol symbolSeq

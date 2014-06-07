@@ -1,5 +1,5 @@
 import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
-import Prelude hiding (seq)
+import Prelude hiding (seq, either)
 
 data Result a = Ok a String | Fail deriving (Show)
 
@@ -72,10 +72,14 @@ lift p = fmap (\r -> [r]) p
 numeric = charTest isDigit
 alpha = charTest isAlpha
 alphaNumeric = charTest isAlphaNum
-whitespace = charTest isSpace 
+space = charTest isSpace 
+whitespace = zeroMany space
 
-symbolSeq = fmap concat $ seq (lift alpha) (zeroMany alphaNumeric)
+token p = fmap (\r -> r !! 1) $ seq whitespace p
+
+symbolSpecial = charTest $ \c -> elem c "+-/=><*!?"
+symbolSeq = fmap concat $ seq (lift (either alpha symbolSpecial)) (zeroMany alphaNumeric)
 
 data Ast = Symbol String deriving (Show)
 
-symbol = fmap Symbol symbolSeq
+symbol = fmap Symbol $ token symbolSeq

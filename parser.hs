@@ -1,4 +1,5 @@
 import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
+import Prelude hiding (seq)
 
 data Result a = Ok a String | Fail deriving (Show)
 
@@ -30,6 +31,14 @@ either p1 p2 = (Parser p) where
          p s = case parse p1 s
                of Fail -> parse p2 s
                   ok -> ok
+
+seq :: Parser a -> Parser a -> Parser [a]
+seq p1 p2 = (Parser p) where
+      p s = case parse p1 s of
+              (Ok c1 rs) -> case parse p2 rs of
+                             (Ok c2 rs2) -> Ok [c1, c2] rs2
+                             Fail -> Fail
+              Fail -> Fail
 
 notEmpty :: Parser Char
 notEmpty = Parser p where

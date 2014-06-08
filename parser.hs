@@ -1,5 +1,5 @@
 import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
-import Prelude hiding (seq, either)
+import Prelude hiding (seq, either, negate)
 
 data Result a = Ok a String | Fail deriving (Show)
 
@@ -74,12 +74,23 @@ alpha = charTest isAlpha
 alphaNumeric = charTest isAlphaNum
 space = charTest isSpace 
 whitespace = zeroMany space
+char c = charTest $ (== c)
+notChar c = charTest $ not . (== c)
 
-token p = fmap (\r -> r !! 1) $ seq whitespace p
+second r = r !! 1
+
+token p = fmap second $ seq whitespace p
 
 symbolSpecial = charTest $ \c -> elem c "+-/=><*!?"
 symbolSeq = fmap concat $ seq (lift (either alpha symbolSpecial)) (zeroMany alphaNumeric)
 
-data Ast = Symbol String deriving (Show)
+data Sexpr = Symbol String | Str String deriving (Show)
 
 symbol = fmap Symbol $ token symbolSeq
+string = fmap Str $ token $ fmap head $ seq (fmap second (seq quote (zeroMany stringChars))) quote where
+  stringChars = notChar '"'
+  quote = lift $ char '"'
+
+-- list = (fmap second $ seq (lift $ char '(') expr)
+
+expr = symbol `either` string

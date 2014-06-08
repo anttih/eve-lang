@@ -18,7 +18,7 @@ instance Monad Parser where
                      of Fail -> Fail
                         (Ok a rs) -> parse (f a) rs
   return v = Parser p where
-       p _ = Ok v ""
+       p cs = Ok v cs
 
 instance Functor Parser where
   fmap f (Parser p) = (Parser newP) where
@@ -78,16 +78,24 @@ second r = r !! 1
 
 token p = fmap snd $ seq whitespace p
 
-symbolSpecial = charTest $ \c -> elem c "+-/=><*!?"
-symbolSeq = fmap (\v -> (fst v):(snd v)) $ seq (either alpha symbolSpecial) (zeroMany alphaNumeric)
-
 data Sexpr = Symbol String | Str String | List [Sexpr] deriving (Show)
 
-symbol = fmap Symbol $ token symbolSeq
-string = fmap Str $ token $ fmap fst $ seq (fmap snd (seq quote (zeroMany stringChars))) quote where
-  stringChars = notChar '"'
+symbol = fmap Symbol $ token symbolSeq where
+  symbolSeq = do first <- (either alpha symbolSpecial)
+                 rest <- zeroMany alphaNumeric
+                 return (first:rest)
+  symbolSpecial = charTest $ \c -> elem c "+-/=><*!?"
+  
+string = do quote
+            xs <- zeroMany stringChar
+            quote
+            return (Str xs) where
   quote = char '"'
+  stringChar = notChar '"'
 
-list = fmap (List . fst) $ token $ seq (fmap snd (seq (char '(') (zeroMany expr))) (char ')')
+list = do token $ char '('
+          xs <- zeroMany expr
+          token $ char ')'
+          return (List xs)
 
-expr = symbol `either` string
+expr =  string `either` symbol `either` list

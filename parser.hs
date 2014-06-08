@@ -39,11 +39,11 @@ either p1 p2 = (Parser p) where
                of Fail -> parse p2 s
                   ok -> ok
 
-seq :: Parser a -> Parser a -> Parser [a]
+seq :: Parser a -> Parser b -> Parser (a, b)
 seq p1 p2 = (Parser p) where
       p s = case parse p1 s of
               (Ok c1 rs) -> case parse p2 rs of
-                             (Ok c2 rs2) -> Ok [c1, c2] rs2
+                             (Ok c2 rs2) -> Ok (c1, c2) rs2
                              Fail -> Fail
               Fail -> Fail
 
@@ -66,9 +66,6 @@ charTest f = both notEmpty (Parser p) where
              then Fail
              else Ok (head s) (tail s)
 
-lift :: Parser a -> Parser [a]
-lift p = fmap (\r -> [r]) p
-
 numeric = charTest isDigit
 alpha = charTest isAlpha
 alphaNumeric = charTest isAlphaNum
@@ -79,18 +76,18 @@ notChar c = charTest $ not . (== c)
 
 second r = r !! 1
 
-token p = fmap second $ seq whitespace p
+token p = fmap snd $ seq whitespace p
 
 symbolSpecial = charTest $ \c -> elem c "+-/=><*!?"
-symbolSeq = fmap concat $ seq (lift (either alpha symbolSpecial)) (zeroMany alphaNumeric)
+symbolSeq = fmap (\v -> (fst v):(snd v)) $ seq (either alpha symbolSpecial) (zeroMany alphaNumeric)
 
-data Sexpr = Symbol String | Str String deriving (Show)
+data Sexpr = Symbol String | Str String | List [Sexpr] deriving (Show)
 
 symbol = fmap Symbol $ token symbolSeq
-string = fmap Str $ token $ fmap head $ seq (fmap second (seq quote (zeroMany stringChars))) quote where
+string = fmap Str $ token $ fmap fst $ seq (fmap snd (seq quote (zeroMany stringChars))) quote where
   stringChars = notChar '"'
-  quote = lift $ char '"'
+  quote = char '"'
 
--- list = (fmap second $ seq (lift $ char '(') expr)
+list = fmap (List . fst) $ token $ seq (fmap snd (seq (char '(') (zeroMany expr))) (char ')')
 
 expr = symbol `either` string

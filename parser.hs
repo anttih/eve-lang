@@ -78,14 +78,19 @@ second r = r !! 1
 
 token p = fmap snd $ seq whitespace p
 
-data Sexpr = Symbol String | Str String | List [Sexpr] deriving (Show)
+data Sexpr = Symbol String | Keyword String | Str String | List [Sexpr] deriving (Show)
+
+symbolSpecial = charTest $ \c -> elem c "+-/=><*!?"
+symbolSeq = do first <- either alpha symbolSpecial
+               rest <- zeroMany alphaNumeric
+               return (first:rest)
 
 symbol = fmap Symbol $ token symbolSeq where
-  symbolSeq = do first <- (either alpha symbolSpecial)
-                 rest <- zeroMany alphaNumeric
-                 return (first:rest)
-  symbolSpecial = charTest $ \c -> elem c "+-/=><*!?"
   
+keyword = do token $ char ':'
+             str <- symbolSeq
+             return (Keyword str)
+
 string = do quote
             xs <- zeroMany stringChar
             quote
@@ -98,4 +103,4 @@ list = do token $ char '('
           token $ char ')'
           return (List xs)
 
-expr =  string `either` symbol `either` list
+expr =  string `either` symbol `either` keyword  `either` list

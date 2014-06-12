@@ -1,5 +1,6 @@
-import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
 import Prelude hiding (seq, either, negate, True, False)
+import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
+import qualified Data.Map as M
 
 data Result a = Ok a String | Fail deriving (Show)
 
@@ -78,7 +79,9 @@ second r = r !! 1
 
 token p = fmap snd $ seq whitespace p
 
-data Sexpr = Symbol String | True | False | Keyword String | Str String | List [Sexpr] deriving (Show)
+-- data LispMap' = MakeLispMap M.Map Sexpr Sexpr
+
+data Sexpr = Symbol String | True | False | Keyword String | Str String | List [Sexpr] | LispMap (M.Map Sexpr Sexpr) deriving (Show, Ord, Eq)
 
 symbolSpecial = charTest $ \c -> elem c "+-/=><*!?"
 symbolSeq = do first <- either alpha symbolSpecial
@@ -113,4 +116,9 @@ list = do token $ char '('
           token $ char ')'
           return (List xs)
 
-expr =  boolean `either` string `either` symbol `either` keyword  `either` list
+lispMap = do token $ char '{'
+             xs <- zeroMany (seq keyword expr)
+             token $ char '}'
+             return $ LispMap (M.fromList xs)
+
+expr =  boolean `either` string `either` symbol `either` keyword  `either` list `either` lispMap

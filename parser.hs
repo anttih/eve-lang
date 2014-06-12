@@ -1,5 +1,5 @@
 import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
-import Prelude hiding (seq, either, negate)
+import Prelude hiding (seq, either, negate, True, False)
 
 data Result a = Ok a String | Fail deriving (Show)
 
@@ -78,7 +78,7 @@ second r = r !! 1
 
 token p = fmap snd $ seq whitespace p
 
-data Sexpr = Symbol String | Keyword String | Str String | List [Sexpr] deriving (Show)
+data Sexpr = Symbol String | True | False | Keyword String | Str String | List [Sexpr] deriving (Show)
 
 symbolSpecial = charTest $ \c -> elem c "+-/=><*!?"
 symbolSeq = do first <- either alpha symbolSpecial
@@ -86,12 +86,22 @@ symbolSeq = do first <- either alpha symbolSpecial
                return (first:rest)
 
 symbol = fmap Symbol $ token symbolSeq where
-  
+
+identifier name = do (Symbol sym) <- symbol
+                     Parser $ equals sym where
+  equals sym cs = if sym == name
+                  then (Ok (Symbol sym) cs)
+                  else Fail
+
+boolean = either (fmap (const True) (identifier "true"))
+                 (fmap (const False) (identifier "false"))
+
+
 keyword = do token $ char ':'
              str <- symbolSeq
              return (Keyword str)
 
-string = do quote
+string = do token quote
             xs <- zeroMany stringChar
             quote
             return (Str xs) where
@@ -103,4 +113,4 @@ list = do token $ char '('
           token $ char ')'
           return (List xs)
 
-expr =  string `either` symbol `either` keyword  `either` list
+expr =  boolean `either` string `either` symbol `either` keyword  `either` list

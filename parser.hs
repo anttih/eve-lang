@@ -1,3 +1,5 @@
+module Parser where
+
 import Prelude hiding (seq, either, negate, True, False)
 import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
 import qualified Data.Map as M

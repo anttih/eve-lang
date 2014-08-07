@@ -2,29 +2,30 @@ module Parser where
 
 import Prelude hiding (seq, either, negate, True, False)
 import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
+import Control.Applicative
 import qualified Data.Map as M
 
 data Result a = Ok a String | Fail deriving (Show)
 
 instance Monad Result where
   Fail >>= _ = Fail
-  (Ok a _) >>= f = (f a)
+  (Ok a _) >>= f = f a
   return a = Ok a ""
 
 data Parser a = Parser (String -> Result a)
 
-parse (Parser f) cs = (f cs)
+parse ::  Parser t -> String -> Result t
+parse (Parser f) = f
 
 instance Monad Parser where
   (Parser p) >>= f = Parser p2 where
              p2 cs = case p cs
                      of Fail -> Fail
                         (Ok a rs) -> parse (f a) rs
-  return v = Parser p where
-       p cs = Ok v cs
+  return v = Parser (Ok v) where
 
 instance Functor Parser where
-  fmap f (Parser p) = (Parser newP) where
+  fmap f (Parser p) = Parser newP where
             newP cs = case p cs of
                         (Ok r s) -> Ok (f r) s
                         _ -> Fail
@@ -34,16 +35,16 @@ both :: Parser a -> Parser a -> Parser a
 both p1 p2 = Parser p where
       p cs = case parse p1 cs
              of Fail -> Fail
-                (Ok m rest) -> parse p2 cs
+                (Ok _ _) -> parse p2 cs
 
 either :: Parser a -> Parser a -> Parser a
-either p1 p2 = (Parser p) where
+either p1 p2 = Parser p where
          p s = case parse p1 s
                of Fail -> parse p2 s
                   ok -> ok
 
 seq :: Parser a -> Parser b -> Parser (a, b)
-seq p1 p2 = (Parser p) where
+seq p1 p2 = Parser p where
       p s = case parse p1 s of
               (Ok c1 rs) -> case parse p2 rs of
                              (Ok c2 rs2) -> Ok (c1, c2) rs2
@@ -51,8 +52,8 @@ seq p1 p2 = (Parser p) where
               Fail -> Fail
 
 zeroMany :: Parser a -> Parser [a]
-zeroMany p = (Parser pa) where
-  pa init = loop [] init
+zeroMany p = Parser pa where
+  pa = loop []
   loop acc cs = case parse p cs of
                  Fail -> Ok (reverse acc) cs
                  (Ok c rest) -> loop (c:acc) rest
@@ -69,58 +70,95 @@ charTest f = both notEmpty (Parser p) where
              then Fail
              else Ok (head s) (tail s)
 
+numeric ::  Parser Char
 numeric = charTest isDigit
+
+alpha ::  Parser Char
 alpha = charTest isAlpha
+
+alphaNumeric ::  Parser Char
 alphaNumeric = charTest isAlphaNum
-space = charTest isSpace 
+
+space ::  Parser Char
+space = charTest isSpace
+
+whitespace ::  Parser String
 whitespace = zeroMany space
-char c = charTest $ (== c)
+
+char ::  Char -> Parser Char
+char c = charTest (== c)
+
+notChar ::  Char -> Parser Char
 notChar c = charTest $ not . (== c)
 
+second ::  [a] -> a
 second r = r !! 1
 
-token p = fmap snd $ seq whitespace p
+token ::  Parser b -> Parser b
+token p = snd <$> seq whitespace p
 
--- data LispMap' = MakeLispMap M.Map Sexpr Sexpr
+data List' a = Pair a (List' a) | Null deriving (Show, Ord, Eq)
 
-data Sexpr = Symbol String | True | False | Keyword String | Str String | List [Sexpr] | LispMap (M.Map Sexpr Sexpr) deriving (Show, Ord, Eq)
+data Sexpr = Symbol String
+             | True
+             | False
+             | Keyword String
+             | Str String
+             | List (List' Sexpr)
+             | LispMap (M.Map Sexpr Sexpr)
+             deriving (Show, Ord, Eq)
 
-symbolSpecial = charTest $ \c -> elem c "+-/=><*!?"
+symbolSpecial ::  Parser Char
+symbolSpecial = charTest $ \c -> c `elem` "+-/=><*!?"
+
+symbolSeq ::  Parser String
 symbolSeq = do first <- either alpha symbolSpecial
                rest <- zeroMany alphaNumeric
                return (first:rest)
 
-symbol = fmap Symbol $ token symbolSeq where
+symbol ::  Parser Sexpr
+symbol = Symbol <$> token symbolSeq where
 
+identifier ::  String -> Parser Sexpr
 identifier name = do (Symbol sym) <- symbol
                      Parser $ equals sym where
   equals sym cs = if sym == name
-                  then (Ok (Symbol sym) cs)
+                  then Ok (Symbol sym) cs
                   else Fail
 
+boolean ::  Parser Sexpr
 boolean = either (fmap (const True) (identifier "true"))
                  (fmap (const False) (identifier "false"))
 
 
-keyword = do token $ char ':'
+keyword ::  Parser Sexpr
+keyword = do _ <- char ':'
              str <- symbolSeq
              return (Keyword str)
 
-string = do token quote
+string ::  Parser Sexpr
+string = do _ <- quote
             xs <- zeroMany stringChar
-            quote
+            _ <- quote
             return (Str xs) where
   quote = char '"'
   stringChar = notChar '"'
 
-list = do token $ char '('
-          xs <- zeroMany expr
-          token $ char ')'
-          return (List xs)
+cons ::  a -> List' a -> List' a
+--cons :: (Sexpr a) -> List' b -> List' a
+cons = Pair
 
-lispMap = do token $ char '{'
+list ::  Parser Sexpr
+list = do _ <- token $ char '('
+          xs <- zeroMany expr
+          _ <- token $ char ')'
+          return $ List (foldr cons Null xs)
+
+lispMap ::  Parser Sexpr
+lispMap = do _ <- token $ char '{'
              xs <- zeroMany (seq keyword expr)
-             token $ char '}'
+             _ <- token $ char '}'
              return $ LispMap (M.fromList xs)
 
+expr ::  Parser Sexpr
 expr =  boolean `either` string `either` symbol `either` keyword  `either` list `either` lispMap

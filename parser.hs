@@ -1,9 +1,13 @@
 module Parser where
 
-import Prelude hiding (seq, either, negate, True, False)
+import Prelude hiding (seq, either, negate, True, False, foldr, takeWhile, concat)
 import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
+import Data.Traversable
 import Control.Applicative
+import Control.Monad (liftM, ap)
+import Data.Foldable (Foldable(foldr))
 import qualified Data.Map as M
+
 
 data Result a = Ok a String | Fail deriving (Show)
 
@@ -11,6 +15,13 @@ instance Monad Result where
   Fail >>= _ = Fail
   (Ok a _) >>= f = f a
   return a = Ok a ""
+
+instance Functor Result where
+  fmap = liftM
+
+instance Applicative Result where
+  pure = return
+  (<*>) = ap
 
 data Parser a = Parser (String -> Result a)
 
@@ -30,6 +41,10 @@ instance Functor Parser where
                         (Ok r s) -> Ok (f r) s
                         _ -> Fail
 
+
+instance Applicative Parser where
+  pure = return
+  (<*>) = ap
 
 both :: Parser a -> Parser a -> Parser a
 both p1 p2 = Parser p where
@@ -98,6 +113,38 @@ token ::  Parser b -> Parser b
 token p = snd <$> seq whitespace p
 
 data List' a = Pair a (List' a) | Null deriving (Show, Ord, Eq)
+
+concat :: List' a -> List' a -> List' a
+concat Null ys = ys
+concat (Pair x xs) ys = Pair x (concat xs ys)
+
+instance Foldable List' where
+  foldr _ z Null = z
+  foldr f z (Pair first rest) = f first (foldr f z rest)
+
+instance Functor List' where
+  fmap _ Null = Null
+  fmap f (Pair x xs)  = Pair (f x) (fmap f xs)
+
+instance Monad List' where
+  return x = Pair x Null
+  m >>= f = foldr (concat . f) Null m
+
+instance Applicative List' where
+  pure = return
+  (<*>) = ap
+
+instance Traversable List' where
+  -- traverse f Null = pure Null
+  -- traverse f (Pair x xs) = Pair (f x) $ traverse f xs
+  traverse f = foldr cons_f (pure Null) where
+    cons_f x ys = Pair <$> f x <*> ys
+
+takeWhile :: (a -> Bool) -> List' a -> List' a
+takeWhile _ Null = Null
+takeWhile f (Pair x xs)
+  | f x       = Pair x (takeWhile f xs)
+  | otherwise = Null
 
 data Sexpr = Symbol String
              | True

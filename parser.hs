@@ -151,7 +151,7 @@ string = do _ <- quote
   stringChar = notChar '"'
 
 number :: Parser LispData
-number = Number . read <$> oneMany numeric where
+number = Number . read <$> token (oneMany numeric)
 
 list ::  Parser LispData
 list = do _ <- token $ char '('

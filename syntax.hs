@@ -2,6 +2,7 @@ module Syntax where
 
 import Prelude hiding (concat)
 import Parser
+import Control.Applicative hiding ((<|>))
 import Control.Monad.Trans.Except
 import Control.Monad.State.Lazy
 
@@ -13,11 +14,9 @@ type Bindings = [String]
 
 data Ast = Let [String] [Ast] Ast
          | Definition String Ast
-         | LispSymbol String
-         | LispString String
-         | LispNumber Int
+         | Literal LispData
          | If Ast Ast Ast
-         | Seq [Ast]
+         | Seq [Ast] deriving (Show)
 
 newtype Checker a = Checker { runChecker :: List LispData -> Syntax a }
 
@@ -31,6 +30,17 @@ instance Monad Checker where
           Left e -> return $ Left e
           Right (x, rest) -> runExceptT $ runChecker (f x) rest
   return x = Checker (\_ -> return (x, Null))
+
+instance Functor Checker where
+  fmap f checker = Checker c where
+    c xs = 
+      let syntax = runChecker checker xs in
+      ExceptT $ do
+        a <- runExceptT syntax
+        case a of
+          Left e -> return $ Left e
+          Right (x, rest) -> return $ Right (f x, rest)
+        
 
 -- lispSpecial :: String -> LispData -> Syntax LispData
 -- lispSpecial name sexpr = case sexpr of
@@ -47,14 +57,14 @@ instance Monad Checker where
 -- bindings :: LispData -> Syntax LispData
 -- bindings = list $ zeroMany $ list2 symbol any
 
---definition :: LispData -> Syntax Ast
---definition s = do
---  _ <- symbol "def" s
---  (Symbol name) <- anySymbol s
---  expr <- lispExpr
---  -- @todo set binding in lexical context
---  -- set ...
---  return $ Definition name expr
+definition :: Checker Ast
+definition = sexpr $ do
+  _ <- symbol "def"
+  (Symbol name) <- anySymbol
+  expr <- lispExpr
+  -- @todo set binding in lexical context
+  -- set ...
+  return $ Definition name expr
 
 --thunk :: LispData -> Syntax Ast
 --thunk _ = return $ Seq []
@@ -91,10 +101,10 @@ anyVal = Checker f where
   f Null = throwE "Expecting a value, but got nothing"
   f (Pair x rest) = return (x, rest)
 
-list :: Checker LispData
-list = anyVal &&& Checker f where
-  f (Pair x rest) = case x of
-    (Sexpr _) -> return (x, rest)
+sexpr :: Checker Ast -> Checker Ast
+sexpr c = anyVal &&& Checker f where
+  f (Pair x _) = case x of
+    (Sexpr rest) -> runChecker c rest
     _ -> throwE $ "Expecting a list, got " ++ show x
   f _ = throwE ""
 
@@ -133,8 +143,8 @@ string = check s "Expecting a string" where
   s (Str _) = True
   s _ = False
 
-number :: Checker LispData
-number = check num "Expecting a number" where
+number :: Checker Ast
+number = Literal <$> check num "Expecting a number" where
   num (Number _) = True
   num _ = False
 
@@ -170,15 +180,15 @@ number = check num "Expecting a number" where
 --                             (Error msg) -> Left msg
 --  check Fail = Left "Parse error"
 
-lispExpr :: Checker LispData
-lispExpr = anySymbol <|> number
+lispExpr :: Checker Ast
+lispExpr = number <|> definition
 
 parse :: Checker LispData -> String -> Either String LispData
 parse c input = case readLispData input of
   Ok e _ -> either Left (Right . fst) $ evalState (runExceptT (runChecker c (Pair e Null))) ()
   Fail -> Left "Parse error"
 
-parseExpr :: String -> Either String LispData
+parseExpr :: String -> Either String Ast
 parseExpr input = case readLispData input of
   Ok e _ -> either Left (Right . fst) $ evalState (runExceptT (runChecker lispExpr (Pair e Null))) ()
   Fail -> Left "Parse error"

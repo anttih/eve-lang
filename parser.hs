@@ -1,9 +1,9 @@
 module Parser (
   Result(Ok, Fail),
-  List'(Pair, Null),
-  Sexpr(Symbol, Str, Number, List, LispMap),
+  List(Pair, Null),
+  LispData(Symbol, Str, Number, Sexpr, LispMap),
   concat,
-  readSexpr) where
+  readLispData) where
 
 import Prelude hiding (seq, either, negate, True, False, foldr, takeWhile, concat)
 import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
@@ -117,49 +117,49 @@ notChar c = charTest $ not . (== c)
 token ::  Parser b -> Parser b
 token p = snd <$> seq whitespace p
 
-data List' a = Pair a (List' a) | Null deriving (Show, Ord, Eq)
+data List a = Pair a (List a) | Null deriving (Show, Ord, Eq)
 
-concat :: List' a -> List' a -> List' a
-concat Null ys = ys
-concat (Pair x xs) ys = Pair x (concat xs ys)
-
-instance Foldable List' where
-  foldr _ z Null = z
-  foldr f z (Pair first rest) = f first (foldr f z rest)
-
-instance Functor List' where
-  fmap _ Null = Null
-  fmap f (Pair x xs)  = Pair (f x) (fmap f xs)
-
-instance Monad List' where
-  return x = Pair x Null
-  m >>= f = foldr (concat . f) Null m
-
-instance Applicative List' where
-  pure = return
-  (<*>) = ap
-
-instance Traversable List' where
-  -- traverse f Null = pure Null
-  -- traverse f (Pair x xs) = Pair (f x) $ traverse f xs
-  traverse f = foldr cons_f (pure Null) where
-    cons_f x ys = Pair <$> f x <*> ys
-
--- takeWhile :: (a -> Bool) -> List' a -> List' a
--- takeWhile _ Null = Null
--- takeWhile f (Pair x xs)
---   | f x       = Pair x (takeWhile f xs)
---   | otherwise = Null
-
-data Sexpr = Symbol String
+data LispData = Symbol String
              | True
              | False
              | Keyword String
              | Str String
              | Number Int
-             | List (List' Sexpr)
-             | LispMap (M.Map Sexpr Sexpr)
+             | Sexpr (List LispData)
+             | LispMap (M.Map LispData LispData)
              deriving (Show, Ord, Eq)
+
+concat :: List a -> List a -> List a
+concat Null ys = ys
+concat (Pair x xs) ys = Pair x (concat xs ys)
+
+instance Foldable List where
+  foldr _ z Null = z
+  foldr f z (Pair first rest) = f first (foldr f z rest)
+
+instance Functor List where
+  fmap _ Null = Null
+  fmap f (Pair x xs)  = Pair (f x) (fmap f xs)
+
+instance Monad List where
+  return x = Pair x Null
+  m >>= f = foldr (concat . f) Null m
+
+instance Applicative List where
+  pure = return
+  (<*>) = ap
+
+instance Traversable List where
+  -- traverse f Null = pure Null
+  -- traverse f (Pair x xs) = Pair (f x) $ traverse f xs
+  traverse f = foldr cons_f (pure Null) where
+    cons_f x ys = Pair <$> f x <*> ys
+
+-- takeWhile :: (a -> Bool) -> List a -> List a
+-- takeWhile _ Null = Null
+-- takeWhile f (Pair x xs)
+--   | f x       = Pair x (takeWhile f xs)
+--   | otherwise = Null
 
 symbolSpecial ::  Parser Char
 symbolSpecial = charTest $ \c -> c `elem` "+-/=><*!?"
@@ -169,27 +169,27 @@ symbolSeq = do first <- either alpha symbolSpecial
                rest <- zeroMany alphaNumeric
                return (first:rest)
 
-symbol ::  Parser Sexpr
+symbol ::  Parser LispData
 symbol = Symbol <$> token symbolSeq
 
-identifier ::  String -> Parser Sexpr
+identifier ::  String -> Parser LispData
 identifier name = do (Symbol sym) <- symbol
                      Parser $ equals sym where
   equals sym cs = if sym == name
                   then Ok (Symbol sym) cs
                   else Fail
 
-boolean ::  Parser Sexpr
+boolean ::  Parser LispData
 boolean = either (fmap (const True) (identifier "true"))
                  (fmap (const False) (identifier "false"))
 
 
-keyword ::  Parser Sexpr
+keyword ::  Parser LispData
 keyword = do _ <- char ':'
              str <- symbolSeq
              return (Keyword str)
 
-string ::  Parser Sexpr
+string ::  Parser LispData
 string = do _ <- quote
             xs <- zeroMany stringChar
             _ <- quote
@@ -197,29 +197,29 @@ string = do _ <- quote
   quote = char '"'
   stringChar = notChar '"'
 
-number :: Parser Sexpr
+number :: Parser LispData
 number = Number . read <$> oneMany numeric where
 
-cons ::  a -> List' a -> List' a
---cons :: (Sexpr a) -> List' b -> List' a
+cons ::  a -> List a -> List a
+--cons :: (LispData a) -> List b -> List a
 cons = Pair
 
-list ::  Parser Sexpr
+list ::  Parser LispData
 list = do _ <- token $ char '('
           xs <- zeroMany expr
           _ <- token $ char ')'
-          return $ List (foldr cons Null xs)
+          return $ Sexpr (foldr cons Null xs)
 
-lispMap ::  Parser Sexpr
+lispMap ::  Parser LispData
 lispMap = do _ <- token $ char '{'
              xs <- zeroMany (seq keyword expr)
              _ <- token $ char '}'
              return $ LispMap (M.fromList xs)
 
-expr ::  Parser Sexpr
+expr ::  Parser LispData
 expr =  boolean `either` string `either` number `either` symbol `either` keyword  `either` list `either` lispMap
 
 -- @todo implement instance Read
-readSexpr :: String -> Result Sexpr
-readSexpr = parse expr
+readLispData :: String -> Result LispData
+readLispData = parse expr
 

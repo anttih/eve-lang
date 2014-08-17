@@ -1,10 +1,10 @@
 module Syntax where
 
-import Prelude hiding (concat)
+import Prelude hiding (concat, sequence)
 import Parser
 import Control.Applicative hiding ((<|>))
 import Control.Monad.Trans.Except
-import Control.Monad.State.Lazy
+import Control.Monad.State.Lazy hiding (sequence)
 
 import Data
 
@@ -30,6 +30,10 @@ instance Monad Checker where
           Left e -> return $ Left e
           Right (x, rest) -> runExceptT $ runChecker (f x) rest
   return x = Checker (\_ -> return (x, Null))
+
+instance Applicative Checker where
+  pure = return
+  (<*>) = ap
 
 instance Functor Checker where
   fmap f checker = Checker c where
@@ -66,6 +70,15 @@ definition = sexpr $ do
   -- set ...
   return $ Definition name expr
 
+sequence :: Checker [Ast]
+sequence = zeroMany lispExpr
+
+doBlock :: Checker Ast
+doBlock = sexpr $ do
+  _ <- symbol "do"
+  xs <- sequence
+  return $ Seq xs
+
 infixl 6 &&&
 -- @todo Won't work? State from c1 is being used in c2
 (&&&) :: Checker a -> Checker b -> Checker b
@@ -101,16 +114,16 @@ sexpr c = anyVal &&& Checker f where
     _ -> throwE $ "Expecting a list, got " ++ show x
   f _ = throwE ""
 
---zeroMany :: (LispData -> Syntax LispData) -> LispData -> Syntax LispData
---zeroMany _ (List Null) = return (List Null)
---zeroMany f (List l) = ExceptT $ loop Null l where
---  loop acc Null = return $ Right (List acc)
---  loop acc (Pair x xs) = do
---    a <- runExceptT (f x)
---    case a of
---      Left _ -> return $ Right (List acc)
---      Right r -> loop (concat acc (Pair r Null)) xs
---zeroMany _ _ = fail "Not a list"
+zeroMany :: Checker a -> Checker [a]
+zeroMany c = Checker p where
+  -- p Null = return (Sexpr Null, Null)
+  p l = ExceptT $ loop [] l where
+    loop acc Null = return $ Right (acc, Null)
+    loop acc rest = do
+      a <- runExceptT (runChecker c rest)
+      case a of
+        Left _ -> return $ Right (acc, rest)
+        Right (x, xs) -> loop (acc ++ [x]) xs
 
 check :: (LispData -> Bool) -> String -> Checker LispData
 check f msg = Checker checker where
@@ -142,7 +155,7 @@ literal = Literal <$> check val "Expecting a literal" where
   val _ = False
 
 lispExpr :: Checker Ast
-lispExpr = literal <|> definition
+lispExpr = literal <|> definition <|> doBlock
 
 parse :: Checker LispData -> String -> Either String LispData
 parse c input = case readLispData input of

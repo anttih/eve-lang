@@ -1,4 +1,9 @@
-module Parser where
+module Parser (
+  Result(Ok, Fail),
+  List'(Pair, Null),
+  Sexpr(Symbol, Str, Number, List, LispMap),
+  concat,
+  readSexpr) where
 
 import Prelude hiding (seq, either, negate, True, False, foldr, takeWhile, concat)
 import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
@@ -23,17 +28,14 @@ instance Applicative Result where
   pure = return
   (<*>) = ap
 
-data Parser a = Parser (String -> Result a)
-
-parse ::  Parser t -> String -> Result t
-parse (Parser f) = f
+data Parser a = Parser { parse :: String -> Result a } 
 
 instance Monad Parser where
   (Parser p) >>= f = Parser p2 where
              p2 cs = case p cs
                      of Fail -> Fail
                         (Ok a rs) -> parse (f a) rs
-  return v = Parser (Ok v) where
+  return v = Parser (Ok v)
 
 instance Functor Parser where
   fmap f (Parser p) = Parser newP where
@@ -73,6 +75,12 @@ zeroMany p = Parser pa where
                  Fail -> Ok (reverse acc) cs
                  (Ok c rest) -> loop (c:acc) rest
 
+oneMany :: Parser a -> Parser [a]
+oneMany p = do
+    x <- p
+    xs <- zeroMany p
+    return (x:xs)
+
 notEmpty :: Parser Char
 notEmpty = Parser p where
      p s = case s
@@ -106,9 +114,6 @@ char c = charTest (== c)
 notChar ::  Char -> Parser Char
 notChar c = charTest $ not . (== c)
 
-second ::  [a] -> a
-second r = r !! 1
-
 token ::  Parser b -> Parser b
 token p = snd <$> seq whitespace p
 
@@ -140,17 +145,18 @@ instance Traversable List' where
   traverse f = foldr cons_f (pure Null) where
     cons_f x ys = Pair <$> f x <*> ys
 
-takeWhile :: (a -> Bool) -> List' a -> List' a
-takeWhile _ Null = Null
-takeWhile f (Pair x xs)
-  | f x       = Pair x (takeWhile f xs)
-  | otherwise = Null
+-- takeWhile :: (a -> Bool) -> List' a -> List' a
+-- takeWhile _ Null = Null
+-- takeWhile f (Pair x xs)
+--   | f x       = Pair x (takeWhile f xs)
+--   | otherwise = Null
 
 data Sexpr = Symbol String
              | True
              | False
              | Keyword String
              | Str String
+             | Number Int
              | List (List' Sexpr)
              | LispMap (M.Map Sexpr Sexpr)
              deriving (Show, Ord, Eq)
@@ -164,7 +170,7 @@ symbolSeq = do first <- either alpha symbolSpecial
                return (first:rest)
 
 symbol ::  Parser Sexpr
-symbol = Symbol <$> token symbolSeq where
+symbol = Symbol <$> token symbolSeq
 
 identifier ::  String -> Parser Sexpr
 identifier name = do (Symbol sym) <- symbol
@@ -191,6 +197,9 @@ string = do _ <- quote
   quote = char '"'
   stringChar = notChar '"'
 
+number :: Parser Sexpr
+number = Number . read <$> oneMany numeric where
+
 cons ::  a -> List' a -> List' a
 --cons :: (Sexpr a) -> List' b -> List' a
 cons = Pair
@@ -208,4 +217,9 @@ lispMap = do _ <- token $ char '{'
              return $ LispMap (M.fromList xs)
 
 expr ::  Parser Sexpr
-expr =  boolean `either` string `either` symbol `either` keyword  `either` list `either` lispMap
+expr =  boolean `either` string `either` number `either` symbol `either` keyword  `either` list `either` lispMap
+
+-- @todo implement instance Read
+readSexpr :: String -> Result Sexpr
+readSexpr = parse expr
+

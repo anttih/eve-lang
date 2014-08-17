@@ -1,128 +1,188 @@
 module Syntax where
 
-import qualified Parser as S
+import Prelude hiding (concat)
+import Parser
 import Control.Monad.Trans.Except
 import Control.Monad.State.Lazy
 
-type ExpansionResult a = ExceptT String (State ()) a
+type Syntax a = ExceptT String (State ()) (a, List' Sexpr)
 
 type Bindings = [String]
 
 data Ast = Let [String] [Ast] Ast
+         | Definition String Ast
+         | LispSymbol String
+         | LispString String
+         | LispNumber Int
          | If Ast Ast Ast
          | Seq [Ast]
 
--- lispSpecial :: String -> S.Sexpr -> ExpansionResult S.Sexpr
+newtype Checker a = Checker { runChecker :: List' Sexpr -> Syntax a }
+
+instance Monad Checker where
+  checker >>= f = Checker bind where
+    bind xs = 
+      let syntax = runChecker checker xs in
+      ExceptT $ do
+        a <- runExceptT syntax
+        case a of
+          Left e -> return $ Left e
+          Right (x, rest) -> runExceptT $ runChecker (f x) rest
+  return x = Checker (\_ -> return (x, Null))
+
+-- lispSpecial :: String -> Sexpr -> Syntax Sexpr
 -- lispSpecial name sexpr = case sexpr of
---     (S.List (S.Pair (S.Symbol sym) rest)) | sym == name -> return (S.List rest)
+--     (List (Pair (Symbol sym) rest)) | sym == name -> return (List rest)
 --     _ -> fail "failure"
 -- 
--- lispLet :: S.Sexpr -> ExpansionResult Ast
+-- lispLet :: Sexpr -> Syntax Ast
 -- lispLet s = do
---   (S.List (S.Pair b (S.Pair body _))) <- lispSpecial "let" s
+--   (List (Pair b (Pair body _))) <- lispSpecial "let" s
 --   b <- bindings b
 --   seq <- thunk body
 --   return (Let ["moi"] [] seq)
 -- 
--- bindings :: S.Sexpr -> ExpansionResult S.Sexpr
+-- bindings :: Sexpr -> Syntax Sexpr
 -- bindings = list $ zeroMany $ list2 symbol any
 
-thunk :: S.Sexpr -> ExpansionResult Ast
-thunk _ = return $ Seq []
+--definition :: Sexpr -> Syntax Ast
+--definition s = do
+--  _ <- symbol "def" s
+--  (Symbol name) <- anySymbol s
+--  expr <- lispExpr
+--  -- @todo set binding in lexical context
+--  -- set ...
+--  return $ Definition name expr
+
+--thunk :: Sexpr -> Syntax Ast
+--thunk _ = return $ Seq []
 
 -- checkLet :: MaybeT ExpansionState Int
--- checkLet = do (S.List p) <- lispSpecial "let"
+-- checkLet = do (List p) <- lispSpecial "let"
 --               return p
 
-data Result = Ok | Error String deriving (Show)
+infixl 6 &&&
+-- @todo Won't work? State from c1 is being used in c2
+(&&&) :: Checker a -> Checker b -> Checker b
+(&&&) c1 c2 = Checker f where
+  f xs = 
+    let syntax = runChecker c1 xs in
+    ExceptT $ do
+      a <- runExceptT syntax
+      case a of
+        Left e -> return $ Left e
+        Right _ -> runExceptT $ runChecker c2 xs
 
--- checker :: Sexpr -> Result
+-- the 'or' operator
+(<|>) :: Checker a -> Checker a -> Checker a
+(<|>) c1 c2 = Checker f where
+  f xs = 
+    let syntax = runChecker c1 xs in
+    ExceptT $ do
+      a <- runExceptT syntax
+      case a of
+        Left _ -> runExceptT $ runChecker c2 xs
+        Right x -> return $ Right x
 
-both ::  (t -> Result) -> (t -> Result) -> t -> Result
-both c1 c2 sexpr = case c1 sexpr
-                   of Ok -> c2 sexpr
-                      e -> e
+anyVal :: Checker Sexpr
+anyVal = Checker f where
+  f Null = throwE "Expecting a value, but got nothing"
+  f (Pair x rest) = return (x, rest)
 
-anyVal :: S.Sexpr -> ExpansionResult S.Sexpr
-anyVal = return
+list :: Checker Sexpr
+list = anyVal &&& Checker f where
+  f (Pair x rest) = case x of
+    (List _) -> return (x, rest)
+    _ -> throwE $ "Expecting a list, got " ++ show x
+  f _ = throwE ""
 
-list :: S.Sexpr -> ExpansionResult S.Sexpr
-list (S.List l) = return (S.List l)
-list e = fail $ "Expecting a list, got " ++ show e
-
-zeroMany :: (S.Sexpr -> ExpansionResult S.Sexpr) -> S.Sexpr -> ExpansionResult S.Sexpr
-zeroMany _ (S.List S.Null) = return (S.List S.Null)
-zeroMany f (S.List l) = ExceptT $ loop S.Null l where
-  loop acc S.Null = return $ Right (S.List acc)
-  loop acc (S.Pair x xs) = do
-    a <- runExceptT (f x)
-    case a of
-      Left _ -> return $ Right (S.List acc)
-      Right r -> loop (S.concat acc (S.Pair r S.Null)) xs
-zeroMany _ _ = fail "Not a list"
+--zeroMany :: (Sexpr -> Syntax Sexpr) -> Sexpr -> Syntax Sexpr
+--zeroMany _ (List Null) = return (List Null)
+--zeroMany f (List l) = ExceptT $ loop Null l where
+--  loop acc Null = return $ Right (List acc)
+--  loop acc (Pair x xs) = do
+--    a <- runExceptT (f x)
+--    case a of
+--      Left _ -> return $ Right (List acc)
+--      Right r -> loop (concat acc (Pair r Null)) xs
+--zeroMany _ _ = fail "Not a list"
 
 --  success e = case runStateT (runExceptT e) of
 --    Right _ -> True
 --    Left _ -> False
  
-anySymbol ::  S.Sexpr -> ExpansionResult S.Sexpr
-anySymbol (S.Symbol s) = return $ S.Symbol s
-anySymbol s = fail $ "Not a symbol, got " ++ show s
+check :: (Sexpr -> Bool) -> String -> Checker Sexpr
+check f msg = Checker checker where
+  checker (Pair x rest) = if f x then return (x, rest) else throwE $ msg ++ ", got " ++ show x
+  checker _ = throwE "Fail. This should not happen."
 
---symbol ::  String -> S.Sexpr -> ExpansionResult S.Sexpr
---symbol name = both anySymbol checkSymbol where
---  checkSymbol (S.Symbol sym) = if sym == name
---                               then return (S.Symbol sym)
---                               else fail $ "Not symbol " ++ name ++ ", got " ++ sym
---  checkSymbol _ = fail "Expecting a symbol"
+anySymbol ::  Checker Sexpr
+anySymbol = anyVal &&& check sym "Expecting any symbol" where
+  sym (Symbol _) = True
+  sym _ = False
 
-nullList ::  S.Sexpr -> Result
-nullList (S.List S.Null) = Ok
-nullList s = Error $ "Expecting an empty list, got " ++ show s
+symbol ::  String -> Checker Sexpr
+symbol name = anySymbol &&& check named ("Expecting symbol " ++ name) where
+  named (Symbol sym) = sym == name
+  named _ = False
 
-isPair ::  S.Sexpr -> Result
-isPair (S.List S.Null) = Error "Not expecting an empty list"
-isPair (S.List (S.Pair _ _)) = Ok
-isPair s = Error $ "Expecting a non empty list, got" ++ show s
+string :: Checker Sexpr
+string = check s "Expecting a string" where
+  s (Str _) = True
+  s _ = False
 
-pair :: (S.Sexpr -> Result) -> (S.Sexpr -> Result) -> S.Sexpr -> Result
-pair first rest = both isPair checkPair where
-  checkPair (S.List (S.Pair x xs)) = case (first x, rest (S.List xs))
-                                   of (Ok, Ok) -> Ok
-                                      (Error m, _) -> Error m
-                                      (Ok, Error m) -> Error m
-  checkPair _ = Error "Expecting a pair"
+number :: Checker Sexpr
+number = check num "Expecting a number" where
+  num (Number _) = True
+  num _ = False
+
+--nullList ::  Sexpr -> Result
+--nullList (List Null) = Ok
+--nullList s = Error $ "Expecting an empty list, got " ++ show s
+--
+--isPair ::  Sexpr -> Result
+--isPair (List Null) = Error "Not expecting an empty list"
+--isPair (List (Pair _ _)) = Ok
+--isPair s = Error $ "Expecting a non empty list, got" ++ show s
+--
+--pair :: (Sexpr -> Result) -> (Sexpr -> Result) -> Sexpr -> Result
+--pair first rest = both isPair checkPair where
+--  checkPair (List (Pair x xs)) = case (first x, rest (List xs))
+--                                   of (Ok, Ok) -> Ok
+--                                      (Error m, _) -> Error m
+--                                      (Ok, Error m) -> Error m
+--  checkPair _ = Error "Expecting a pair"
 
 --data Checker a = Checker (a -> Result)
 --
---instance Monad Checker where
---  (Checker c) >>= f = Checker bind where
---    bind (S.List (S.Pair x xs)) = case c x
---                                  of Ok -> case f x
---                                           of (Checker ch) -> ch (S.List xs)
---                                     e -> e
---  return v = (\l -> Ok)
 
 -- letForm = do symbol "let"
 --              list (zeroMany bindings)
 --              thunk
 
 
-checkString :: (S.Sexpr -> Result) -> String -> Either String S.Sexpr
-checkString c s = check (S.parse S.expr s) where
-  check (S.Ok sexpr _) = case c sexpr
-                          of Ok -> Right sexpr
-                             (Error msg) -> Left msg
-  check S.Fail = Left "Parse error"
+--checkString :: (Sexpr -> Result) -> String -> Either String Sexpr
+--checkString c s = check (parse expr s) where
+--  check (Ok sexpr _) = case c sexpr
+--                          of Ok -> Right sexpr
+--                             (Error msg) -> Left msg
+--  check Fail = Left "Parse error"
 
-parse :: (S.Sexpr -> ExpansionResult S.Sexpr) -> String -> Either String S.Sexpr
-parse p input = case S.parse S.expr input of
-  S.Ok e _ -> evalState (runExceptT (p e)) ()
-  S.Fail -> Left "Parse error"
+lispExpr :: Checker Sexpr
+lispExpr = anySymbol <|> number
 
+parse :: Checker Sexpr -> String -> Either String Sexpr
+parse c input = case readSexpr input of
+  Ok e _ -> either Left (Right . fst) $ evalState (runExceptT (runChecker c (Pair e Null))) ()
+  Fail -> Left "Parse error"
 
---parseString ::  String -> S.Sexpr
+parseExpr :: String -> Either String Sexpr
+parseExpr input = case readSexpr input of
+  Ok e _ -> either Left (Right . fst) $ evalState (runExceptT (runChecker lispExpr (Pair e Null))) ()
+  Fail -> Left "Parse error"
+
+--parseString ::  String -> Sexpr
 --parseString input = runState (runExceptT )
 
--- forms (S.List (S.Pair (S.Symbol "let") rest)) =
--- forms (S.List (S.Pair (S.Symbol "if") rest)) =
+-- forms (List (Pair (Symbol "let") rest)) =
+-- forms (List (Pair (Symbol "if") rest)) =

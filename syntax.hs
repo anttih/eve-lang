@@ -66,13 +66,6 @@ definition = sexpr $ do
   -- set ...
   return $ Definition name expr
 
---thunk :: LispData -> Syntax Ast
---thunk _ = return $ Seq []
-
--- checkLet :: MaybeT ExpansionState Int
--- checkLet = do (List p) <- lispSpecial "let"
---               return p
-
 infixl 6 &&&
 -- @todo Won't work? State from c1 is being used in c2
 (&&&) :: Checker a -> Checker b -> Checker b
@@ -119,10 +112,6 @@ sexpr c = anyVal &&& Checker f where
 --      Right r -> loop (concat acc (Pair r Null)) xs
 --zeroMany _ _ = fail "Not a list"
 
---  success e = case runStateT (runExceptT e) of
---    Right _ -> True
---    Left _ -> False
- 
 check :: (LispData -> Bool) -> String -> Checker LispData
 check f msg = Checker checker where
   checker (Pair x rest) = if f x then return (x, rest) else throwE $ msg ++ ", got " ++ show x
@@ -148,38 +137,6 @@ number = Literal <$> check num "Expecting a number" where
   num (Number _) = True
   num _ = False
 
---nullList ::  LispData -> Result
---nullList (List Null) = Ok
---nullList s = Error $ "Expecting an empty list, got " ++ show s
---
---isPair ::  LispData -> Result
---isPair (List Null) = Error "Not expecting an empty list"
---isPair (List (Pair _ _)) = Ok
---isPair s = Error $ "Expecting a non empty list, got" ++ show s
---
---pair :: (LispData -> Result) -> (LispData -> Result) -> LispData -> Result
---pair first rest = both isPair checkPair where
---  checkPair (List (Pair x xs)) = case (first x, rest (List xs))
---                                   of (Ok, Ok) -> Ok
---                                      (Error m, _) -> Error m
---                                      (Ok, Error m) -> Error m
---  checkPair _ = Error "Expecting a pair"
-
---data Checker a = Checker (a -> Result)
---
-
--- letForm = do symbol "let"
---              list (zeroMany bindings)
---              thunk
-
-
---checkString :: (LispData -> Result) -> String -> Either String LispData
---checkString c s = check (parse expr s) where
---  check (Ok sexpr _) = case c sexpr
---                          of Ok -> Right sexpr
---                             (Error msg) -> Left msg
---  check Fail = Left "Parse error"
-
 lispExpr :: Checker Ast
 lispExpr = number <|> definition
 
@@ -192,9 +149,3 @@ parseExpr :: String -> Either String Ast
 parseExpr input = case readLispData input of
   Ok e _ -> either Left (Right . fst) $ evalState (runExceptT (runChecker lispExpr (Pair e Null))) ()
   Fail -> Left "Parse error"
-
---parseString ::  String -> LispData
---parseString input = runState (runExceptT )
-
--- forms (List (Pair (Symbol "let") rest)) =
--- forms (List (Pair (Symbol "if") rest)) =

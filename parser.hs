@@ -138,12 +138,12 @@ boolean = either (fmap (const $ LispBool True) (identifier "true"))
                  (fmap (const $ LispBool False) (identifier "false"))
 
 keyword ::  Parser LispData
-keyword = do _ <- char ':'
+keyword = do _ <- token $ char ':'
              str <- symbolSeq
              return (Keyword str)
 
 string ::  Parser LispData
-string = do _ <- quote
+string = do _ <- token quote
             xs <- zeroMany stringChar
             _ <- quote
             return (Str xs) where

@@ -132,13 +132,17 @@ string = check s "Expecting a string" where
   s (Str _) = True
   s _ = False
 
-number :: Checker Ast
-number = Literal <$> check num "Expecting a number" where
-  num (Number _) = True
-  num _ = False
+literal :: Checker Ast
+literal = Literal <$> check val "Expecting a literal" where
+  val (LispBool _) = True
+  val (Number _) = True
+  val (Str _) = True
+  val (LispMap _) = True
+  val (Keyword _) = True
+  val _ = False
 
 lispExpr :: Checker Ast
-lispExpr = number <|> definition
+lispExpr = literal <|> definition
 
 parse :: Checker LispData -> String -> Either String LispData
 parse c input = case readLispData input of

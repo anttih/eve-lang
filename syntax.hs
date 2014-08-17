@@ -5,6 +5,8 @@ import Parser
 import Control.Monad.Trans.Except
 import Control.Monad.State.Lazy
 
+import Data
+
 type Syntax a = ExceptT String (State ()) (a, List LispData)
 
 type Bindings = [String]

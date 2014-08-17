@@ -1,18 +1,16 @@
 module Parser (
   Result(Ok, Fail),
-  List(Pair, Null),
-  LispData(Symbol, Str, Number, Sexpr, LispMap),
-  concat,
-  readLispData) where
+  readLispData
+  ) where
 
-import Prelude hiding (seq, either, negate, True, False, foldr, takeWhile, concat)
+import Prelude hiding (seq, either, negate, foldr, takeWhile, concat)
 import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
-import Data.Traversable
+import Data.Foldable (Foldable(foldr))
 import Control.Applicative
 import Control.Monad (liftM, ap)
-import Data.Foldable (Foldable(foldr))
 import qualified Data.Map as M
 
+import Data
 
 data Result a = Ok a String | Fail deriving (Show)
 
@@ -117,50 +115,6 @@ notChar c = charTest $ not . (== c)
 token ::  Parser b -> Parser b
 token p = snd <$> seq whitespace p
 
-data List a = Pair a (List a) | Null deriving (Show, Ord, Eq)
-
-data LispData = Symbol String
-             | True
-             | False
-             | Keyword String
-             | Str String
-             | Number Int
-             | Sexpr (List LispData)
-             | LispMap (M.Map LispData LispData)
-             deriving (Show, Ord, Eq)
-
-concat :: List a -> List a -> List a
-concat Null ys = ys
-concat (Pair x xs) ys = Pair x (concat xs ys)
-
-instance Foldable List where
-  foldr _ z Null = z
-  foldr f z (Pair first rest) = f first (foldr f z rest)
-
-instance Functor List where
-  fmap _ Null = Null
-  fmap f (Pair x xs)  = Pair (f x) (fmap f xs)
-
-instance Monad List where
-  return x = Pair x Null
-  m >>= f = foldr (concat . f) Null m
-
-instance Applicative List where
-  pure = return
-  (<*>) = ap
-
-instance Traversable List where
-  -- traverse f Null = pure Null
-  -- traverse f (Pair x xs) = Pair (f x) $ traverse f xs
-  traverse f = foldr cons_f (pure Null) where
-    cons_f x ys = Pair <$> f x <*> ys
-
--- takeWhile :: (a -> Bool) -> List a -> List a
--- takeWhile _ Null = Null
--- takeWhile f (Pair x xs)
---   | f x       = Pair x (takeWhile f xs)
---   | otherwise = Null
-
 symbolSpecial ::  Parser Char
 symbolSpecial = charTest $ \c -> c `elem` "+-/=><*!?"
 
@@ -180,9 +134,8 @@ identifier name = do (Symbol sym) <- symbol
                   else Fail
 
 boolean ::  Parser LispData
-boolean = either (fmap (const True) (identifier "true"))
-                 (fmap (const False) (identifier "false"))
-
+boolean = either (fmap (const $ LispBool True) (identifier "true"))
+                 (fmap (const $ LispBool False) (identifier "false"))
 
 keyword ::  Parser LispData
 keyword = do _ <- char ':'
@@ -199,10 +152,6 @@ string = do _ <- quote
 
 number :: Parser LispData
 number = Number . read <$> oneMany numeric where
-
-cons ::  a -> List a -> List a
---cons :: (LispData a) -> List b -> List a
-cons = Pair
 
 list ::  Parser LispData
 list = do _ <- token $ char '('

@@ -8,7 +8,7 @@ import Control.Monad.State.Lazy hiding (sequence)
 
 import Data
 
-type Syntax a = ExceptT String (State ()) (a, List LispData)
+type Syntax a = ExceptT String (State [String]) (a, List LispData)
 
 type Bindings = [String]
 
@@ -61,13 +61,16 @@ instance Functor Checker where
 -- bindings :: LispData -> Syntax LispData
 -- bindings = list $ zeroMany $ list2 symbol any
 
+addBinding :: String -> Syntax ()
+addBinding name = mapExceptT f (return ((), Null)) where
+  f = mapState (\(a, _) -> (a, [name]))
+
 definition :: Checker Ast
 definition = sexpr $ do
   _ <- symbol "def"
   (Symbol name) <- anySymbol
   expr <- lispExpr
-  -- @todo set binding in lexical context
-  -- set ...
+  _ <- return $ addBinding name
   return $ Definition name expr
 
 sequence :: Checker [Ast]
@@ -159,10 +162,10 @@ lispExpr = literal <|> definition <|> doBlock
 
 parse :: Checker LispData -> String -> Either String LispData
 parse c input = case readLispData input of
-  Ok e _ -> either Left (Right . fst) $ evalState (runExceptT (runChecker c (Pair e Null))) ()
+  Ok e _ -> either Left (Right . fst) $ evalState (runExceptT (runChecker c (Pair e Null))) []
   Fail -> Left "Parse error"
 
 parseExpr :: String -> Either String Ast
 parseExpr input = case readLispData input of
-  Ok e _ -> either Left (Right . fst) $ evalState (runExceptT (runChecker lispExpr (Pair e Null))) ()
+  Ok e _ -> either Left (Right . fst) $ evalState (runExceptT (runChecker lispExpr (Pair e Null))) []
   Fail -> Left "Parse error"

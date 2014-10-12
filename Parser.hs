@@ -26,7 +26,7 @@ instance Applicative Result where
   pure = return
   (<*>) = ap
 
-data Parser a = Parser { parse :: String -> Result a } 
+data Parser a = Parser { parse :: String -> Result a }
 
 instance Monad Parser where
   (Parser p) >>= f = Parser p2 where
@@ -171,4 +171,3 @@ expr =  boolean `either` string `either` number `either` symbol `either` keyword
 -- @todo implement instance Read
 readLispData :: String -> Result LispData
 readLispData = parse expr
-

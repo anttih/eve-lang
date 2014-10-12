@@ -3,12 +3,12 @@ module Syntax where
 import Prelude hiding (concat, sequence)
 import Parser
 import Control.Applicative hiding ((<|>))
-import Control.Monad.Trans.Except
+import Control.Monad.Trans.Either
 import Control.Monad.State.Lazy hiding (sequence)
 
 import Data
 
-type Syntax a = ExceptT String (State [String]) (a, List LispData)
+type Syntax a = EitherT String (State [String]) (a, List LispData)
 
 type Bindings = [String]
 
@@ -22,13 +22,13 @@ newtype Checker a = Checker { runChecker :: List LispData -> Syntax a }
 
 instance Monad Checker where
   checker >>= f = Checker bind where
-    bind xs = 
+    bind xs =
       let syntax = runChecker checker xs in
-      ExceptT $ do
-        a <- runExceptT syntax
+      EitherT $ do
+        a <- runEitherT syntax
         case a of
           Left e -> return $ Left e
-          Right (x, rest) -> runExceptT $ runChecker (f x) rest
+          Right (x, rest) -> runEitherT $ runChecker (f x) rest
   return x = Checker (\_ -> return (x, Null))
 
 instance Applicative Checker where
@@ -37,32 +37,32 @@ instance Applicative Checker where
 
 instance Functor Checker where
   fmap f checker = Checker c where
-    c xs = 
+    c xs =
       let syntax = runChecker checker xs in
-      ExceptT $ do
-        a <- runExceptT syntax
+      EitherT $ do
+        a <- runEitherT syntax
         case a of
           Left e -> return $ Left e
           Right (x, rest) -> return $ Right (f x, rest)
-        
+
 
 -- lispSpecial :: String -> LispData -> Syntax LispData
 -- lispSpecial name sexpr = case sexpr of
 --     (List (Pair (Symbol sym) rest)) | sym == name -> return (List rest)
 --     _ -> fail "failure"
--- 
+--
 -- lispLet :: LispData -> Syntax Ast
 -- lispLet s = do
 --   (List (Pair b (Pair body _))) <- lispSpecial "let" s
 --   b <- bindings b
 --   seq <- thunk body
 --   return (Let ["moi"] [] seq)
--- 
+--
 -- bindings :: LispData -> Syntax LispData
 -- bindings = list $ zeroMany $ list2 symbol any
 
 addBinding :: String -> Syntax ()
-addBinding name = mapExceptT f (return ((), Null)) where
+addBinding name = mapEitherT f (return ((), Null)) where
   f = mapState (\(a, _) -> (a, [name]))
 
 definition :: Checker Ast
@@ -86,52 +86,52 @@ infixl 6 &&&
 -- @todo Won't work? State from c1 is being used in c2
 (&&&) :: Checker a -> Checker b -> Checker b
 (&&&) c1 c2 = Checker f where
-  f xs = 
+  f xs =
     let syntax = runChecker c1 xs in
-    ExceptT $ do
-      a <- runExceptT syntax
+    EitherT $ do
+      a <- runEitherT syntax
       case a of
         Left e -> return $ Left e
-        Right _ -> runExceptT $ runChecker c2 xs
+        Right _ -> runEitherT $ runChecker c2 xs
 
 -- the 'or' operator
 (<|>) :: Checker a -> Checker a -> Checker a
 (<|>) c1 c2 = Checker f where
-  f xs = 
+  f xs =
     let syntax = runChecker c1 xs in
-    ExceptT $ do
-      a <- runExceptT syntax
+    EitherT $ do
+      a <- runEitherT syntax
       case a of
-        Left _ -> runExceptT $ runChecker c2 xs
+        Left _ -> runEitherT $ runChecker c2 xs
         Right x -> return $ Right x
 
 anyVal :: Checker LispData
 anyVal = Checker f where
-  f Null = throwE "Expecting a value, but got nothing"
+  f Null = left "Expecting a value, but got nothing"
   f (Pair x rest) = return (x, rest)
 
 sexpr :: Checker Ast -> Checker Ast
 sexpr c = anyVal &&& Checker f where
   f (Pair x _) = case x of
     (Sexpr rest) -> runChecker c rest
-    _ -> throwE $ "Expecting a list, got " ++ show x
-  f _ = throwE ""
+    _ -> left $ "Expecting a list, got " ++ show x
+  f _ = left ""
 
 zeroMany :: Checker a -> Checker [a]
 zeroMany c = Checker p where
   -- p Null = return (Sexpr Null, Null)
-  p l = ExceptT $ loop [] l where
+  p l = EitherT $ loop [] l where
     loop acc Null = return $ Right (acc, Null)
     loop acc rest = do
-      a <- runExceptT (runChecker c rest)
+      a <- runEitherT (runChecker c rest)
       case a of
         Left _ -> return $ Right (acc, rest)
         Right (x, xs) -> loop (acc ++ [x]) xs
 
 check :: (LispData -> Bool) -> String -> Checker LispData
 check f msg = Checker checker where
-  checker (Pair x rest) = if f x then return (x, rest) else throwE $ msg ++ ", got " ++ show x
-  checker _ = throwE "Fail. This should not happen."
+  checker (Pair x rest) = if f x then return (x, rest) else left $ msg ++ ", got " ++ show x
+  checker _ = left "Fail. This should not happen."
 
 anySymbol ::  Checker LispData
 anySymbol = anyVal &&& check sym "Expecting any symbol" where
@@ -162,10 +162,10 @@ lispExpr = literal <|> definition <|> doBlock
 
 parse :: Checker LispData -> String -> Either String LispData
 parse c input = case readLispData input of
-  Ok e _ -> either Left (Right . fst) $ evalState (runExceptT (runChecker c (Pair e Null))) []
+  Ok e _ -> either Left (Right . fst) $ evalState (runEitherT (runChecker c (Pair e Null))) []
   Fail -> Left "Parse error"
 
 parseExpr :: String -> Either String Ast
 parseExpr input = case readLispData input of
-  Ok e _ -> either Left (Right . fst) $ evalState (runExceptT (runChecker lispExpr (Pair e Null))) []
+  Ok e _ -> either Left (Right . fst) $ evalState (runEitherT (runChecker lispExpr (Pair e Null))) []
   Fail -> Left "Parse error"

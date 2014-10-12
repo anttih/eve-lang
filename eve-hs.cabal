@@ -4,17 +4,17 @@
 name:                eve-hs
 version:             0.1.0.0
 synopsis:            Eve language
--- description:         
+-- description:
 license:             MIT
 license-file:        LICENSE
 author:              Antti Holvikari
 maintainer:          anttih@gmail.com
--- copyright:           
+-- copyright:
 category:            Language
 build-type:          Simple
 cabal-version:       >=1.8
 
 library
   exposed-modules:   Syntax, Parser, Data
-  -- other-modules:       
-  build-depends:       base, transformers, mtl, containers
+  -- other-modules:
+  build-depends:       base, transformers, mtl, containers, either==4.3.1

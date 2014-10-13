@@ -60,10 +60,6 @@ instance Functor Checker where
 -- bindings :: LispData -> Syntax LispData
 -- bindings = list $ zeroMany $ list2 symbol any
 
---addBinding :: String -> Syntax ()
---addBinding name = mapEitherT f $ return ((), Null) where
---  f = mapState (\(a, _) -> (a, [name]))
-
 addBinding :: String -> List LispData -> Syntax ()
 addBinding name xs = state (\names -> (((), xs), name : names))
 

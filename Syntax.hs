@@ -4,13 +4,13 @@ import Prelude hiding (concat, sequence)
 import Parser
 import Control.Applicative hiding ((<|>))
 import Control.Monad.Trans.Either
-import Control.Monad.State.Lazy hiding (sequence)
+import Control.Monad.State.Strict hiding (sequence)
 
 import Data
 
-type Syntax a = EitherT String (State [String]) (a, List LispData)
-
 type Bindings = [String]
+
+type Syntax a = EitherT String (State Bindings) (a, List LispData)
 
 data Ast = Let [String] [Ast] Ast
          | Definition String Ast
@@ -29,7 +29,7 @@ instance Monad Checker where
         case a of
           Left e -> return $ Left e
           Right (x, rest) -> runEitherT $ runChecker (f x) rest
-  return x = Checker (\_ -> return (x, Null))
+  return x = Checker (\xs -> return (x, xs))
 
 instance Applicative Checker where
   pure = return
@@ -44,7 +44,6 @@ instance Functor Checker where
         case a of
           Left e -> return $ Left e
           Right (x, rest) -> return $ Right (f x, rest)
-
 
 -- lispSpecial :: String -> LispData -> Syntax LispData
 -- lispSpecial name sexpr = case sexpr of
@@ -61,16 +60,19 @@ instance Functor Checker where
 -- bindings :: LispData -> Syntax LispData
 -- bindings = list $ zeroMany $ list2 symbol any
 
-addBinding :: String -> Syntax ()
-addBinding name = mapEitherT f (return ((), Null)) where
-  f = mapState (\(a, _) -> (a, [name]))
+--addBinding :: String -> Syntax ()
+--addBinding name = mapEitherT f $ return ((), Null) where
+--  f = mapState (\(a, _) -> (a, [name]))
+
+addBinding :: String -> List LispData -> Syntax ()
+addBinding name xs = state (\names -> (((), xs), name : names))
 
 definition :: Checker Ast
 definition = sexpr $ do
   _ <- symbol "def"
   (Symbol name) <- anySymbol
   expr <- lispExpr
-  _ <- return $ addBinding name
+  _ <- Checker $ addBinding name
   return $ Definition name expr
 
 sequence :: Checker [Ast]
@@ -169,3 +171,13 @@ parseExpr :: String -> Either String Ast
 parseExpr input = case readLispData input of
   Ok e _ -> either Left (Right . fst) $ evalState (runEitherT (runChecker lispExpr (Pair e Null))) []
   Fail -> Left "Parse error"
+
+runExprState' :: Checker Ast -> String -> Either String Bindings
+runExprState' checker input = case readLispData input of
+  Ok e _ -> case runState (runEitherT (runChecker checker (Pair e Null))) [] of
+    (Left m, _) -> Left m
+    (Right _, s) -> Right s
+  Fail -> Left "Parse error"
+
+runExprState :: String -> Either String Bindings
+runExprState = runExprState' lispExpr

@@ -45,20 +45,26 @@ instance Functor Checker where
           Left e -> return $ Left e
           Right (x, rest) -> return $ Right (f x, rest)
 
--- lispSpecial :: String -> LispData -> Syntax LispData
--- lispSpecial name sexpr = case sexpr of
---     (List (Pair (Symbol sym) rest)) | sym == name -> return (List rest)
---     _ -> fail "failure"
---
--- lispLet :: LispData -> Syntax Ast
--- lispLet s = do
---   (List (Pair b (Pair body _))) <- lispSpecial "let" s
---   b <- bindings b
---   seq <- thunk body
---   return (Let ["moi"] [] seq)
---
--- bindings :: LispData -> Syntax LispData
--- bindings = list $ zeroMany $ list2 symbol any
+lispLet :: Checker Ast
+lispLet = sexpr $ do
+  void $ symbol "let"
+  b <- sexpr bindings
+  body <- sequence
+  return (Let (fst <$> b) (snd <$> b) (Seq body))
+
+bindings :: Checker [(String, Ast)]
+bindings = zeroMany $ list2 binding lispExpr
+  where
+  list2 :: Checker a -> Checker b -> Checker (a, b)
+  list2 ac bc = sexpr $ do
+    a <- ac
+    b <- bc
+    return (a, b)
+
+  binding :: Checker String
+  binding = name <$> anySymbol
+    where name (Symbol s) = s
+          name _ = "Fail. Should not happen."
 
 addBinding :: String -> Checker ()
 addBinding name = Checker c
@@ -77,7 +83,7 @@ sequence = zeroMany lispExpr
 
 doBlock :: Checker Ast
 doBlock = sexpr $ do
-  _ <- symbol "do"
+  void $ symbol "do"
   xs <- sequence
   return $ Seq xs
 
@@ -109,10 +115,10 @@ anyVal = Checker f where
   f Null = left "Expecting a value, but got nothing"
   f (Pair x rest) = return (x, rest)
 
-sexpr :: Checker Ast -> Checker Ast
+sexpr :: Checker a -> Checker a
 sexpr c = anyVal &&& Checker f where
-  f (Pair x _) = case x of
-    (Sexpr rest) -> runChecker c rest
+  f (Pair x rest) = case x of
+    (Sexpr xs) -> (\(res, _) -> (res, rest)) <$> runChecker c xs
     _ -> left $ "Expecting a list, got " ++ show x
   f _ = left ""
 
@@ -157,7 +163,7 @@ literal = Literal <$> check val "Expecting a literal" where
   val _ = False
 
 lispExpr :: Checker Ast
-lispExpr = literal <|> definition <|> doBlock
+lispExpr = literal <|> definition <|> lispLet <|> doBlock
 
 parse :: Checker LispData -> String -> Either String LispData
 parse c input = case readLispData input of

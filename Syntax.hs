@@ -60,15 +60,16 @@ instance Functor Checker where
 -- bindings :: LispData -> Syntax LispData
 -- bindings = list $ zeroMany $ list2 symbol any
 
-addBinding :: String -> List LispData -> Syntax ()
-addBinding name xs = state (\names -> (((), xs), name : names))
+addBinding :: String -> Checker ()
+addBinding name = Checker c
+  where c xs = state (\names -> (((), xs), name : names))
 
 definition :: Checker Ast
 definition = sexpr $ do
-  _ <- symbol "def"
+  void $ symbol "def"
   (Symbol name) <- anySymbol
   expr <- lispExpr
-  _ <- Checker $ addBinding name
+  addBinding name
   return $ Definition name expr
 
 sequence :: Checker [Ast]

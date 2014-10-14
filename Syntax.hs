@@ -124,13 +124,12 @@ sexpr c = anyVal &&& Checker f where
 
 zeroMany :: Checker a -> Checker [a]
 zeroMany c = Checker p where
-  -- p Null = return (Sexpr Null, Null)
   p l = EitherT $ loop [] l where
     loop acc Null = return $ Right (acc, Null)
     loop acc rest = do
       a <- runEitherT (runChecker c rest)
       case a of
-        Left _ -> return $ Right (acc, rest)
+        Left e -> return $ Left e
         Right (x, xs) -> loop (acc ++ [x]) xs
 
 check :: (LispData -> Bool) -> String -> Checker LispData

@@ -101,10 +101,9 @@ doBlock = sexpr $ do
   xs <- sequence
   return $ Seq xs
 
-infixl 6 &&&
 -- @todo Won't work? State from c1 is being used in c2
-(&&&) :: Checker a -> Checker b -> Checker b
-(&&&) c1 c2 = Checker f where
+(<&>) :: Checker a -> Checker b -> Checker b
+(<&>) c1 c2 = Checker f where
   f xs =
     let syntax = runChecker c1 xs in
     EitherT $ do
@@ -130,7 +129,7 @@ anyVal = Checker f where
   f (Pair x rest) = return (x, rest)
 
 sexpr :: Checker a -> Checker a
-sexpr c = anyVal &&& Checker f where
+sexpr c = anyVal <&> Checker f where
   f (Pair x rest) = case x of
     (Sexpr xs) -> (\(res, _) -> (res, rest)) <$> runChecker c xs
     _ -> left $ "Expecting a list, got " ++ show x
@@ -152,12 +151,12 @@ check f msg = Checker checker where
   checker _ = left "Fail. This should not happen."
 
 anySymbol ::  Checker LispData
-anySymbol = anyVal &&& check sym "Expecting any symbol" where
+anySymbol = anyVal <&> check sym "Expecting any symbol" where
   sym (Symbol _) = True
   sym _ = False
 
 symbol ::  String -> Checker LispData
-symbol name = anySymbol &&& check named ("Expecting symbol " ++ name) where
+symbol name = anySymbol <&> check named ("Expecting symbol " ++ name) where
   named (Symbol sym) = sym == name
   named _ = False
 

@@ -8,7 +8,7 @@ import Control.Monad.State.Strict hiding (sequence)
 
 import Data
 
-type Bindings = [String]
+type Bindings = [[String]]
 
 type Syntax a = EitherT String (State Bindings) (a, List LispData)
 
@@ -49,7 +49,9 @@ lispLet :: Checker Ast
 lispLet = sexpr $ do
   void $ symbol "let"
   b <- sexpr bindings
+  pushFrame (fst <$> b)
   body <- sequence
+  popFrame
   return (Let (fst <$> b) (snd <$> b) (Seq body))
 
 bindings :: Checker [(String, Ast)]
@@ -68,7 +70,19 @@ bindings = zeroMany $ list2 binding lispExpr
 
 addBinding :: String -> Checker ()
 addBinding name = Checker c
-  where c xs = state (\names -> (((), xs), name : names))
+  where c xs = state (\s -> (((), xs), newState name s))
+        newState x [] = [[x]]
+        newState x (frame:prev) = (x : frame) : prev
+
+pushFrame :: [String] -> Checker ()
+pushFrame names = Checker c
+  where c xs = state (\prev -> (((), xs), names : prev))
+
+popFrame :: Checker ()
+popFrame = Checker c
+  where c xs = state (\s -> (((), xs), pop s))
+        pop [] = []
+        pop (_:xs) = xs
 
 definition :: Checker Ast
 definition = sexpr $ do

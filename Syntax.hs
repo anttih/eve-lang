@@ -7,6 +7,7 @@ import Control.Monad.Trans.Either
 import Control.Monad.State.Strict hiding (sequence)
 
 import Data
+import Data.List (find)
 
 type Bindings = [[String]]
 
@@ -14,6 +15,8 @@ type Syntax a = EitherT String (State Bindings) (a, List LispData)
 
 data Ast = Let [String] [Ast] Ast
          | Definition String Ast
+         | LocalReference String
+         | FreeReference String
          | Literal LispData
          | If Ast Ast Ast
          | Seq [Ast] deriving (Show)
@@ -101,6 +104,17 @@ doBlock = sexpr $ do
   xs <- sequence
   return $ Seq xs
 
+reference :: Checker Ast
+reference = do
+  (Symbol name) <- anySymbol
+  addRef name
+    where
+    addRef :: String -> Checker Ast
+    addRef name = Checker f where
+      f xs = do
+        s <- get
+        return $ maybe (FreeReference name, xs) (const (LocalReference name, xs)) $ find (elem name) s
+
 -- @todo Won't work? State from c1 is being used in c2
 (<&>) :: Checker a -> Checker b -> Checker b
 (<&>) c1 c2 = Checker f where
@@ -175,7 +189,7 @@ literal = Literal <$> check val "Expecting a literal" where
   val _ = False
 
 lispExpr :: Checker Ast
-lispExpr = literal <|> definition <|> lispLet <|> doBlock
+lispExpr = literal <|> definition <|> reference <|> lispLet <|> doBlock
 
 parse :: Checker LispData -> String -> Either String LispData
 parse c input = case readLispData input of

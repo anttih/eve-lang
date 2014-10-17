@@ -1,7 +1,7 @@
 module Syntax where
 
 import Prelude hiding (concat, sequence)
-import Parser
+import Reader
 import Control.Applicative hiding ((<|>))
 import Control.Monad.Trans.Either
 import Control.Monad.State.Strict hiding (sequence)
@@ -64,20 +64,20 @@ bindings = zeroMany $ sexpr $ (,) <$> binding <*> lispExpr where
   binding = (\(Symbol s) -> s) <$> anySymbol
 
 addBinding :: String -> Checker ()
-addBinding name = Checker c
-  where c xs = state (\s -> (((), xs), newState name s))
-        newState x [] = [[x]]
-        newState x (frame:prev) = (x : frame) : prev
+addBinding name = Checker c where
+  c xs = state (\s -> (((), xs), newState name s)) where
+    newState x [] = [[x]]
+    newState x (frame:prev) = (x : frame) : prev
 
 pushFrame :: [String] -> Checker ()
-pushFrame names = Checker c
-  where c xs = state (\prev -> (((), xs), names : prev))
+pushFrame names = Checker c where
+  c xs = state (\prev -> (((), xs), names : prev))
 
 popFrame :: Checker ()
-popFrame = Checker c
-  where c xs = state (\s -> (((), xs), pop s))
-        pop [] = []
-        pop (_:xs) = xs
+popFrame = Checker c where
+  c xs = state (\s -> (((), xs), pop s)) where
+    pop [] = []
+    pop (_:rest) = rest
 
 sequence :: Checker [Ast]
 sequence = zeroMany lispExpr
@@ -110,8 +110,7 @@ doBlock = sexpr $ do
 reference :: Checker Ast
 reference = do
   (Symbol name) <- anySymbol
-  addRef name
-    where
+  addRef name where
     addRef :: String -> Checker Ast
     addRef name = Checker f where
       f xs = do

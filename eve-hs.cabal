@@ -15,6 +15,6 @@ build-type:          Simple
 cabal-version:       >=1.8
 
 library
-  exposed-modules:   Syntax, Parser, Data
+  exposed-modules:   Syntax, Reader, Data
   -- other-modules:
   build-depends:       base, transformers, mtl, containers, either==4.3.1

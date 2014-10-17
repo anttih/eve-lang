@@ -155,12 +155,19 @@ anyVal = Checker f where
   f Null = left "Expecting a value, but got nothing"
   f (Pair x rest) = return (x, rest)
 
+endSexpr :: Checker ()
+endSexpr = Checker f where
+  f Null = return ((), Null)
+  f (Pair x _) = left $ "Expecting the end of list, but got " ++ show x
+
+-- Parse values from inside a lisp list (...) with checker `c`. The checker
+-- should consume all of the values inside the list.
 sexpr :: Checker a -> Checker a
-sexpr c = anyVal <&> Checker f where
-  f (Pair x rest) = case x of
-    (Sexpr xs) -> (\(res, _) -> (res, rest)) <$> runChecker c xs
+sexpr c = anyVal <&> Checker isSexpr where
+  isSexpr (Pair x rest) = case x of
+    (Sexpr xs) -> (\(res, _) -> (res, rest)) <$> runChecker (c <* endSexpr) xs
     _ -> left $ "Expecting a list, got " ++ show x
-  f _ = left ""
+  isSexpr _ = left ""
 
 zeroMany :: Checker a -> Checker [a]
 zeroMany c = Checker p where

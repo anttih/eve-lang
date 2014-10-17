@@ -14,11 +14,13 @@ type Bindings = [[String]]
 type Syntax a = EitherT String (State Bindings) (a, List LispData)
 
 data Ast = Let [String] [Ast] Ast
+         | Function [String] Ast
+         | Application Ast [Ast]
          | Definition String Ast
          | LocalReference String
          | FreeReference String
          | Literal LispData
-         | If Ast Ast Ast
+         | Alternative Ast Ast Ast
          | Seq [Ast] deriving (Show)
 
 newtype Checker a = Checker { runChecker :: List LispData -> Syntax a }
@@ -87,6 +89,9 @@ popFrame = Checker c
         pop [] = []
         pop (_:xs) = xs
 
+sequence :: Checker [Ast]
+sequence = zeroMany lispExpr
+
 definition :: Checker Ast
 definition = sexpr $ do
   void $ symbol "def"
@@ -95,8 +100,16 @@ definition = sexpr $ do
   addBinding name
   return $ Definition name expr
 
-sequence :: Checker [Ast]
-sequence = zeroMany lispExpr
+funcDefinition :: Checker Ast
+funcDefinition = sexpr $ do
+  void $ symbol "defn"
+  (Symbol name) <- anySymbol
+  addBinding name
+  args <- sexpr $ zeroMany $ (\(Symbol s) -> s) <$> anySymbol
+  pushFrame args
+  impl <- sequence
+  popFrame
+  return $ Definition name (Function args (Seq impl))
 
 doBlock :: Checker Ast
 doBlock = sexpr $ do
@@ -189,7 +202,7 @@ literal = Literal <$> check val "Expecting a literal" where
   val _ = False
 
 lispExpr :: Checker Ast
-lispExpr = literal <|> definition <|> reference <|> lispLet <|> doBlock
+lispExpr = literal <|> definition <|> funcDefinition <|> reference <|> lispLet <|> doBlock
 
 parse :: Checker LispData -> String -> Either String LispData
 parse c input = case readLispData input of

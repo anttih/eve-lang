@@ -105,11 +105,11 @@ funcDefinition = sexpr $ do
   void $ symbol "defn"
   (Symbol name) <- anySymbol
   addBinding name
-  args <- sexpr $ zeroMany $ (\(Symbol s) -> s) <$> anySymbol
-  pushFrame args
+  params <- sexpr $ zeroMany $ (\(Symbol s) -> s) <$> anySymbol
+  pushFrame params
   impl <- sequence
   popFrame
-  return $ Definition name (Function args (Seq impl))
+  return $ Definition name (Function params (Seq impl))
 
 doBlock :: Checker Ast
 doBlock = sexpr $ do

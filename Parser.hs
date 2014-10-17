@@ -2,7 +2,7 @@ module Parser where
 
 import Prelude hiding (concat, sequence)
 import Reader
-import Control.Applicative hiding ((<|>))
+import Control.Applicative
 import Control.Monad.Trans.Either
 import Control.Monad.State.Strict hiding (sequence)
 
@@ -39,6 +39,11 @@ instance Monad Parser where
 instance Applicative Parser where
   pure = return
   (<*>) = ap
+
+instance Alternative Parser where
+  empty = Parser (\_ -> left "")
+  (<|>) c1 c2 = Parser f where
+    f xs = runParser c1 xs <|> runParser c2 xs
 
 instance Functor Parser where
   fmap f checker = Parser c where
@@ -127,17 +132,6 @@ reference = do
       case a of
         Left e -> return $ Left e
         Right _ -> runEitherT $ runParser c2 xs
-
--- the 'or' operator
-(<|>) :: Parser a -> Parser a -> Parser a
-(<|>) c1 c2 = Parser f where
-  f xs =
-    let syntax = runParser c1 xs in
-    EitherT $ do
-      a <- runEitherT syntax
-      case a of
-        Left _ -> runEitherT $ runParser c2 xs
-        Right x -> return $ Right x
 
 anyVal :: Parser LispData
 anyVal = Parser f where

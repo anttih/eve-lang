@@ -30,17 +30,16 @@ data Reader a = Reader { runReader :: String -> Result a }
 
 instance Monad Reader where
   (Reader p) >>= f = Reader p2 where
-             p2 cs = case p cs
-                     of Fail -> Fail
-                        (Ok a rs) -> runReader (f a) rs
+    p2 cs = case p cs of
+      Fail -> Fail
+      (Ok a rs) -> runReader (f a) rs
   return v = Reader (Ok v)
 
 instance Functor Reader where
   fmap f (Reader p) = Reader newP where
-            newP cs = case p cs of
-                        (Ok r s) -> Ok (f r) s
-                        _ -> Fail
-
+    newP cs = case p cs of
+      (Ok r s) -> Ok (f r) s
+      _ -> Fail
 
 instance Applicative Reader where
   pure = return
@@ -48,23 +47,18 @@ instance Applicative Reader where
 
 both :: Reader a -> Reader a -> Reader a
 both p1 p2 = Reader p where
-      p cs = case runReader p1 cs
-             of Fail -> Fail
-                (Ok _ _) -> runReader p2 cs
+  p cs = case runReader p1 cs of
+    Fail -> Fail
+    (Ok _ _) -> runReader p2 cs
 
 either :: Reader a -> Reader a -> Reader a
 either p1 p2 = Reader p where
-         p s = case runReader p1 s
-               of Fail -> runReader p2 s
-                  ok -> ok
+  p s = case runReader p1 s of
+    Fail -> runReader p2 s
+    ok -> ok
 
 seq :: Reader a -> Reader b -> Reader (a, b)
-seq p1 p2 = Reader p where
-      p s = case runReader p1 s of
-              (Ok c1 rs) -> case runReader p2 rs of
-                             (Ok c2 rs2) -> Ok (c1, c2) rs2
-                             Fail -> Fail
-              Fail -> Fail
+seq p1 p2 = (,) <$> p1 <*> p2
 
 zeroMany :: Reader a -> Reader [a]
 zeroMany p = Reader pa where

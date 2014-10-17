@@ -65,7 +65,7 @@ lispLet = sexpr $ do
   return (Let (fst <$> b) (snd <$> b) (Seq body))
 
 bindings :: Parser [(String, Ast)]
-bindings = zeroMany $ sexpr $ (,) <$> binding <*> lispExpr where
+bindings = many $ sexpr $ (,) <$> binding <*> lispExpr where
   binding = (\(Symbol s) -> s) <$> anySymbol
 
 addBinding :: String -> Parser ()
@@ -85,7 +85,7 @@ popFrame = Parser c where
     pop (_:rest) = rest
 
 sequence :: Parser [Ast]
-sequence = zeroMany lispExpr
+sequence = many lispExpr
 
 definition :: Parser Ast
 definition = sexpr $ do
@@ -100,7 +100,7 @@ funcDefinition = sexpr $ do
   void $ symbol "defn"
   (Symbol name) <- anySymbol
   addBinding name
-  params <- sexpr $ zeroMany $ (\(Symbol s) -> s) <$> anySymbol
+  params <- sexpr $ many $ (\(Symbol s) -> s) <$> anySymbol
   pushFrame params
   impl <- sequence
   popFrame
@@ -151,16 +151,6 @@ sexpr c = anyVal <&> Parser isSexpr where
     (Sexpr xs) -> (\(res, _) -> (res, rest)) <$> runParser (c <* endSexpr) xs
     _ -> left $ "Expecting a list, got " ++ show x
   isSexpr _ = left ""
-
-zeroMany :: Parser a -> Parser [a]
-zeroMany c = Parser p where
-  p l = EitherT $ loop [] l where
-    loop acc Null = return $ Right (acc, Null)
-    loop acc rest = do
-      a <- runEitherT (runParser c rest)
-      case a of
-        Left e -> return $ Left e
-        Right (x, xs) -> loop (acc ++ [x]) xs
 
 check :: (LispData -> Bool) -> String -> Parser LispData
 check f msg = Parser checker where

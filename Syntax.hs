@@ -60,18 +60,8 @@ lispLet = sexpr $ do
   return (Let (fst <$> b) (snd <$> b) (Seq body))
 
 bindings :: Checker [(String, Ast)]
-bindings = zeroMany $ list2 binding lispExpr
-  where
-  list2 :: Checker a -> Checker b -> Checker (a, b)
-  list2 ac bc = sexpr $ do
-    a <- ac
-    b <- bc
-    return (a, b)
-
-  binding :: Checker String
-  binding = name <$> anySymbol
-    where name (Symbol s) = s
-          name _ = "Fail. Should not happen."
+bindings = zeroMany $ sexpr $ (,) <$> binding <*> lispExpr where
+  binding = (\(Symbol s) -> s) <$> anySymbol
 
 addBinding :: String -> Checker ()
 addBinding name = Checker c

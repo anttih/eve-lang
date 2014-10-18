@@ -100,10 +100,10 @@ symbolSpecial ::  Reader Char
 symbolSpecial = charTest $ \c -> c `elem` "+-/=><*!?"
 
 symbolSeq ::  Reader String
-symbolSeq = (:) <$> (alpha <|> symbolSpecial) <*> many alphaNumeric
+symbolSeq = lexeme $ (:) <$> (alpha <|> symbolSpecial) <*> many alphaNumeric
 
 symbol ::  Reader LispData
-symbol = Symbol <$> lexeme symbolSeq
+symbol = Symbol <$> symbolSeq
 
 identifier ::  String -> Reader LispData
 identifier name = do
@@ -118,21 +118,21 @@ boolean = true <$> identifier "true" <|> false <$> identifier "false" where
   false = const $ LispBool False
 
 keyword ::  Reader LispData
-keyword = Keyword <$> (char ':' *> lexeme symbolSeq)
+keyword = Keyword <$> (char ':' *> symbolSeq)
 
 string ::  Reader LispData
-string = Str <$> lexeme (quote *> many stringChar <* quote) where
+string = lexeme $ Str <$> (quote *> many stringChar <* quote) where
   quote = char '"'
   stringChar = notChar '"'
 
 number :: Reader LispData
-number = Number . read <$> lexeme (some numeric)
+number = lexeme $ Number . read <$> some numeric
 
 list ::  Reader LispData
-list = Sexpr . foldr cons Null <$> lexeme (char '(' *> many expr <* char ')') where
+list = lexeme $ Sexpr . foldr cons Null <$> (char '(' *> many expr <* char ')') where
 
 lispMap ::  Reader LispData
-lispMap = LispMap . M.fromList <$> lexeme (char '{' *> pairs <* char '}') where
+lispMap = lexeme $ LispMap . M.fromList <$> (char '{' *> pairs <* char '}') where
   pairs = many (seq keyword expr)
 
 expr ::  Reader LispData

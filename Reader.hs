@@ -93,8 +93,8 @@ char c = charTest (== c)
 notChar ::  Char -> Reader Char
 notChar c = charTest $ not . (== c)
 
-token ::  Reader b -> Reader b
-token p = snd <$> seq whitespace p
+lexeme :: Reader a -> Reader a
+lexeme p = p <* whitespace
 
 symbolSpecial ::  Reader Char
 symbolSpecial = charTest $ \c -> c `elem` "+-/=><*!?"
@@ -103,7 +103,7 @@ symbolSeq ::  Reader String
 symbolSeq = (:) <$> (alpha <|> symbolSpecial) <*> many alphaNumeric
 
 symbol ::  Reader LispData
-symbol = Symbol <$> token symbolSeq
+symbol = Symbol <$> lexeme symbolSeq
 
 identifier ::  String -> Reader LispData
 identifier name = do
@@ -118,27 +118,25 @@ boolean = true <$> identifier "true" <|> false <$> identifier "false" where
   false = const $ LispBool False
 
 keyword ::  Reader LispData
-keyword = Keyword <$> (token (char ':') *> symbolSeq)
+keyword = Keyword <$> (char ':' *> lexeme symbolSeq)
 
 string ::  Reader LispData
-string = Str <$> (token quote *> many stringChar <* quote) where
+string = Str <$> lexeme (quote *> many stringChar <* quote) where
   quote = char '"'
   stringChar = notChar '"'
 
 number :: Reader LispData
-number = Number . read <$> token (some numeric)
+number = Number . read <$> lexeme (some numeric)
 
 list ::  Reader LispData
-list = Sexpr . foldr cons Null <$> (paren '(' *> many expr <* paren ')') where
-  paren c = token $ char c
+list = Sexpr . foldr cons Null <$> lexeme (char '(' *> many expr <* char ')') where
 
 lispMap ::  Reader LispData
-lispMap = LispMap . M.fromList <$> (curly '{' *> pairs <* curly '}') where
-  curly c = token $ char c
+lispMap = LispMap . M.fromList <$> lexeme (char '{' *> pairs <* char '}') where
   pairs = many (seq keyword expr)
 
 expr ::  Reader LispData
-expr =  boolean <|> string <|> number <|> symbol <|> keyword <|> list <|> lispMap
+expr = whitespace *> (boolean <|> string <|> number <|> symbol <|> keyword <|> list <|> lispMap)
 
 -- @todo implement instance Read
 readLispData :: String -> Result LispData

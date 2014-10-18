@@ -3,7 +3,7 @@ module Reader (
   readLispData
   ) where
 
-import Prelude hiding (seq, either, negate, foldr, takeWhile, concat)
+import Prelude hiding (seq, negate, foldr, takeWhile, concat)
 import Data.Char (isAlphaNum, isAlpha, isDigit, isSpace)
 import Data.Foldable (Foldable(foldr))
 import Control.Applicative
@@ -45,33 +45,21 @@ instance Applicative Reader where
   pure = return
   (<*>) = ap
 
+instance Alternative Reader where
+  empty = Reader (const Fail)
+  (<|>) p1 p2 = Reader f where
+    f xs = case runReader p1 xs of
+      Fail -> runReader p2 xs
+      ok -> ok
+
 both :: Reader a -> Reader a -> Reader a
 both p1 p2 = Reader p where
   p cs = case runReader p1 cs of
     Fail -> Fail
     (Ok _ _) -> runReader p2 cs
 
-either :: Reader a -> Reader a -> Reader a
-either p1 p2 = Reader p where
-  p s = case runReader p1 s of
-    Fail -> runReader p2 s
-    ok -> ok
-
 seq :: Reader a -> Reader b -> Reader (a, b)
 seq p1 p2 = (,) <$> p1 <*> p2
-
-zeroMany :: Reader a -> Reader [a]
-zeroMany p = Reader pa where
-  pa = loop []
-  loop acc cs = case runReader p cs of
-                 Fail -> Ok (reverse acc) cs
-                 (Ok c rest) -> loop (c:acc) rest
-
-oneMany :: Reader a -> Reader [a]
-oneMany p = do
-    x <- p
-    xs <- zeroMany p
-    return (x:xs)
 
 notEmpty :: Reader Char
 notEmpty = Reader p where
@@ -98,7 +86,7 @@ space ::  Reader Char
 space = charTest isSpace
 
 whitespace ::  Reader String
-whitespace = zeroMany space
+whitespace = many space
 
 char ::  Char -> Reader Char
 char c = charTest (== c)
@@ -113,8 +101,8 @@ symbolSpecial ::  Reader Char
 symbolSpecial = charTest $ \c -> c `elem` "+-/=><*!?"
 
 symbolSeq ::  Reader String
-symbolSeq = do first <- either alpha symbolSpecial
-               rest <- zeroMany alphaNumeric
+symbolSeq = do first <- alpha <|> symbolSpecial
+               rest <- many alphaNumeric
                return (first:rest)
 
 symbol ::  Reader LispData
@@ -128,8 +116,8 @@ identifier name = do (Symbol sym) <- symbol
                   else Fail
 
 boolean ::  Reader LispData
-boolean = either (fmap (const $ LispBool True) (identifier "true"))
-                 (fmap (const $ LispBool False) (identifier "false"))
+boolean = fmap (const $ LispBool True) (identifier "true") <|>
+          fmap (const $ LispBool False) (identifier "false")
 
 keyword ::  Reader LispData
 keyword = do _ <- token $ char ':'
@@ -138,29 +126,29 @@ keyword = do _ <- token $ char ':'
 
 string ::  Reader LispData
 string = do _ <- token quote
-            xs <- zeroMany stringChar
+            xs <- many stringChar
             _ <- quote
             return (Str xs) where
   quote = char '"'
   stringChar = notChar '"'
 
 number :: Reader LispData
-number = Number . read <$> token (oneMany numeric)
+number = Number . read <$> token (some numeric)
 
 list ::  Reader LispData
 list = do _ <- token $ char '('
-          xs <- zeroMany expr
+          xs <- many expr
           _ <- token $ char ')'
           return $ Sexpr (foldr cons Null xs)
 
 lispMap ::  Reader LispData
 lispMap = do _ <- token $ char '{'
-             xs <- zeroMany (seq keyword expr)
+             xs <- many (seq keyword expr)
              _ <- token $ char '}'
              return $ LispMap (M.fromList xs)
 
 expr ::  Reader LispData
-expr =  boolean `either` string `either` number `either` symbol `either` keyword  `either` list `either` lispMap
+expr =  boolean <|> string <|> number <|> symbol <|> keyword <|> list <|> lispMap
 
 -- @todo implement instance Read
 readLispData :: String -> Result LispData

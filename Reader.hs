@@ -116,8 +116,9 @@ identifier name = do (Symbol sym) <- symbol
                   else Fail
 
 boolean ::  Reader LispData
-boolean = fmap (const $ LispBool True) (identifier "true") <|>
-          fmap (const $ LispBool False) (identifier "false")
+boolean = true <$> identifier "true" <|> false <$> identifier "false" where
+  true = const $ LispBool True
+  false = const $ LispBool False
 
 keyword ::  Reader LispData
 keyword = do _ <- token $ char ':'

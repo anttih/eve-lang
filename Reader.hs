@@ -63,15 +63,14 @@ seq p1 p2 = (,) <$> p1 <*> p2
 
 notEmpty :: Reader Char
 notEmpty = Reader p where
-     p s = case s
-           of [] -> Fail
-              (fs:rest) -> Ok fs rest
+  p []        = Fail
+  p (fs:rest) = Ok fs rest
 
 charTest :: (Char -> Bool) -> Reader Char
 charTest f = both notEmpty (Reader p) where
-       p s = if not $ f $ head s
-             then Fail
-             else Ok (head s) (tail s)
+  p []                = Fail
+  p (c:_) | not $ f c = Fail
+  p (x:xs)            = Ok x xs
 
 numeric ::  Reader Char
 numeric = charTest isDigit
@@ -109,11 +108,11 @@ symbol ::  Reader LispData
 symbol = Symbol <$> token symbolSeq
 
 identifier ::  String -> Reader LispData
-identifier name = do (Symbol sym) <- symbol
-                     Reader $ equals sym where
-  equals sym cs = if sym == name
-                  then Ok (Symbol sym) cs
-                  else Fail
+identifier name = do
+  (Symbol sym) <- symbol
+  Reader $ equals sym where
+    equals sym cs | sym == name = Ok (Symbol sym) cs
+    equals _ _ = Fail
 
 boolean ::  Reader LispData
 boolean = true <$> identifier "true" <|> false <$> identifier "false" where
@@ -121,32 +120,36 @@ boolean = true <$> identifier "true" <|> false <$> identifier "false" where
   false = const $ LispBool False
 
 keyword ::  Reader LispData
-keyword = do _ <- token $ char ':'
-             str <- symbolSeq
-             return (Keyword str)
+keyword = do
+  _ <- token $ char ':'
+  str <- symbolSeq
+  return (Keyword str)
 
 string ::  Reader LispData
-string = do _ <- token quote
-            xs <- many stringChar
-            _ <- quote
-            return (Str xs) where
-  quote = char '"'
-  stringChar = notChar '"'
+string = do
+  _ <- token quote
+  xs <- many stringChar
+  _ <- quote
+  return (Str xs) where
+    quote = char '"'
+    stringChar = notChar '"'
 
 number :: Reader LispData
 number = Number . read <$> token (some numeric)
 
 list ::  Reader LispData
-list = do _ <- token $ char '('
-          xs <- many expr
-          _ <- token $ char ')'
-          return $ Sexpr (foldr cons Null xs)
+list = do
+  _ <- token $ char '('
+  xs <- many expr
+  _ <- token $ char ')'
+  return $ Sexpr (foldr cons Null xs)
 
 lispMap ::  Reader LispData
-lispMap = do _ <- token $ char '{'
-             xs <- many (seq keyword expr)
-             _ <- token $ char '}'
-             return $ LispMap (M.fromList xs)
+lispMap = do
+  _ <- token $ char '{'
+  xs <- many (seq keyword expr)
+  _ <- token $ char '}'
+  return $ LispMap (M.fromList xs)
 
 expr ::  Reader LispData
 expr =  boolean <|> string <|> number <|> symbol <|> keyword <|> list <|> lispMap

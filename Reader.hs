@@ -110,7 +110,7 @@ identifier name = do
   (Symbol sym) <- symbol
   Reader $ equals sym where
     equals sym cs | sym == name = Ok (Symbol sym) cs
-    equals _ _ = Fail
+    equals _ _                  = Fail
 
 boolean ::  Reader LispData
 boolean = true <$> identifier "true" <|> false <$> identifier "false" where

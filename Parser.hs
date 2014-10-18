@@ -55,15 +55,7 @@ instance Functor Parser where
           Left e -> return $ Left e
           Right (x, rest) -> return $ Right (f x, rest)
 
-lispLet :: Parser Ast
-lispLet = sexpr $ do
-  void $ symbol "let"
-  b <- sexpr bindings
-  pushFrame (fst <$> b)
-  body <- sequence
-  popFrame
-  return (Let (fst <$> b) (snd <$> b) (Seq body))
-
+-- State modification
 bindings :: Parser [(String, Ast)]
 bindings = many $ sexpr $ (,) <$> binding <*> lispExpr where
   binding = (\(Symbol s) -> s) <$> anySymbol
@@ -83,6 +75,15 @@ popFrame = Parser c where
   c xs = state (\s -> (((), xs), pop s)) where
     pop [] = []
     pop (_:rest) = rest
+
+lispLet :: Parser Ast
+lispLet = sexpr $ do
+  void $ symbol "let"
+  b <- sexpr bindings
+  pushFrame (fst <$> b)
+  body <- sequence
+  popFrame
+  return (Let (fst <$> b) (snd <$> b) (Seq body))
 
 sequence :: Parser [Ast]
 sequence = many lispExpr
@@ -107,10 +108,7 @@ funcDefinition = sexpr $ do
   return $ Definition name (Function params (Seq impl))
 
 doBlock :: Parser Ast
-doBlock = sexpr $ do
-  void $ symbol "do"
-  xs <- sequence
-  return $ Seq xs
+doBlock = Seq <$> sexpr (symbol "do" *> sequence)
 
 reference :: Parser Ast
 reference = do

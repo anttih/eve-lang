@@ -1,13 +1,13 @@
-module Parser where
+module Eve.Parser where
 
 import Prelude hiding (concat, sequence)
-import Reader
 import Control.Applicative
 import Control.Monad.Trans.Either
 import Control.Monad.State.Strict hiding (sequence)
-
-import Data
 import Data.List (find)
+
+import Eve.Data
+import Eve.Reader
 
 type Bindings = [[String]]
 

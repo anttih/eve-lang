@@ -1,4 +1,4 @@
-module Reader (
+module Eve.Reader (
   Result(Ok, Fail),
   readLispData
   ) where
@@ -10,7 +10,7 @@ import Control.Applicative
 import Control.Monad (liftM, ap)
 import qualified Data.Map as M
 
-import Data
+import Eve.Data
 
 data Result a = Ok a String | Fail deriving (Show)
 

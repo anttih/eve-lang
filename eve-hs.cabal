@@ -14,7 +14,9 @@ category:            Language
 build-type:          Simple
 cabal-version:       >=1.8
 
+
 library
-  exposed-modules:   Parser, Reader
-  other-modules:     Data
+  hs-source-dirs:    src
+  exposed-modules:   Eve.Parser, Eve.Reader
+  other-modules:     Eve.Data
   build-depends:     base, transformers, mtl, containers, either==4.3.1

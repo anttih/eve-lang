@@ -121,30 +121,21 @@ keyword ::  Reader LispData
 keyword = Keyword <$> (token (char ':') *> symbolSeq)
 
 string ::  Reader LispData
-string = do
-  _ <- token quote
-  xs <- many stringChar
-  _ <- quote
-  return (Str xs) where
-    quote = char '"'
-    stringChar = notChar '"'
+string = Str <$> (token quote *> many stringChar <* quote) where
+  quote = char '"'
+  stringChar = notChar '"'
 
 number :: Reader LispData
 number = Number . read <$> token (some numeric)
 
 list ::  Reader LispData
-list = do
-  _ <- token $ char '('
-  xs <- many expr
-  _ <- token $ char ')'
-  return $ Sexpr (foldr cons Null xs)
+list = Sexpr . foldr cons Null <$> (paren '(' *> many expr <* paren ')') where
+  paren c = token $ char c
 
 lispMap ::  Reader LispData
-lispMap = do
-  _ <- token $ char '{'
-  xs <- many (seq keyword expr)
-  _ <- token $ char '}'
-  return $ LispMap (M.fromList xs)
+lispMap = LispMap . M.fromList <$> (curly '{' *> pairs <* curly '}') where
+  curly c = token $ char c
+  pairs = many (seq keyword expr)
 
 expr ::  Reader LispData
 expr =  boolean <|> string <|> number <|> symbol <|> keyword <|> list <|> lispMap

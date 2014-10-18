@@ -100,9 +100,7 @@ symbolSpecial ::  Reader Char
 symbolSpecial = charTest $ \c -> c `elem` "+-/=><*!?"
 
 symbolSeq ::  Reader String
-symbolSeq = do first <- alpha <|> symbolSpecial
-               rest <- many alphaNumeric
-               return (first:rest)
+symbolSeq = (:) <$> (alpha <|> symbolSpecial) <*> many alphaNumeric
 
 symbol ::  Reader LispData
 symbol = Symbol <$> token symbolSeq
@@ -120,10 +118,7 @@ boolean = true <$> identifier "true" <|> false <$> identifier "false" where
   false = const $ LispBool False
 
 keyword ::  Reader LispData
-keyword = do
-  _ <- token $ char ':'
-  str <- symbolSeq
-  return (Keyword str)
+keyword = Keyword <$> (token (char ':') *> symbolSeq)
 
 string ::  Reader LispData
 string = do

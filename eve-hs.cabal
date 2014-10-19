@@ -17,6 +17,7 @@ cabal-version:       >=1.8
 
 library
   hs-source-dirs:    src
+  ghc-options:       -Wall
   exposed-modules:   Eve.Parser, Eve.Reader
   other-modules:     Eve.Data
   build-depends:     base, transformers, mtl, containers, either==4.3.1

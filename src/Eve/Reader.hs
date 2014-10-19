@@ -58,9 +58,6 @@ both p1 p2 = Reader p where
     Fail -> Fail
     (Ok _ _) -> runReader p2 cs
 
-seq :: Reader a -> Reader b -> Reader (a, b)
-seq p1 p2 = (,) <$> p1 <*> p2
-
 notEmpty :: Reader Char
 notEmpty = Reader p where
   p []        = Fail
@@ -133,7 +130,7 @@ list = lexeme $ Sexpr . foldr cons Null <$> (char '(' *> many expr <* char ')') 
 
 lispMap ::  Reader LispData
 lispMap = lexeme $ LispMap . M.fromList <$> (char '{' *> pairs <* char '}') where
-  pairs = many (seq keyword expr)
+  pairs = many ((,) <$> keyword <*> expr)
 
 expr ::  Reader LispData
 expr = whitespace *> (boolean <|> string <|> number <|> symbol <|> keyword <|> list <|> lispMap)

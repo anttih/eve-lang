@@ -68,11 +68,11 @@ addBinding name = Parser c where
 
 pushFrame :: [String] -> Parser ()
 pushFrame names = Parser c where
-  c xs = state (\prev -> (((), xs), names : prev))
+  c xs = state $ \prev -> (((), xs), names : prev)
 
 popFrame :: Parser ()
 popFrame = Parser c where
-  c xs = state (\s -> (((), xs), pop s)) where
+  c xs = state $ \s -> (((), xs), pop s) where
     pop [] = []
     pop (_:rest) = rest
 
@@ -83,7 +83,7 @@ lispLet = sexpr $ do
   pushFrame (fst <$> b)
   body <- sequence
   popFrame
-  return (Let (fst <$> b) (snd <$> b) (Seq body))
+  return $ Let (fst <$> b) (snd <$> b) (Seq body)
 
 sequence :: Parser [Ast]
 sequence = many lispExpr

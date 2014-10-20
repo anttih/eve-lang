@@ -1,6 +1,6 @@
 module Eve.Parser where
 
-import Prelude hiding (concat, sequence)
+import Prelude hiding (concat, sequence, lookup)
 import Control.Applicative
 import Control.Monad.Trans.Either
 import Control.Monad.State.Strict hiding (sequence)
@@ -9,12 +9,14 @@ import Data.List (find)
 import Eve.Data
 import Eve.Reader
 
-type Bindings = [[String]]
+data Binding = Binding String | Special String deriving (Show)
+
+type Bindings = [[Binding]]
 
 type Syntax a = EitherT String (State Bindings) (a, List LispData)
 
-data Ast = Let [String] [Ast] Ast
-         | Function [String] Ast
+data Ast = Let [Binding] [Ast] Ast
+         | Function [Binding] Ast
          | Application Ast [Ast]
          | Definition String Ast
          | LocalReference String
@@ -55,18 +57,22 @@ instance Functor Parser where
           Left e -> return $ Left e
           Right (x, rest) -> return $ Right (f x, rest)
 
+binding :: LispData -> Binding
+binding (Symbol s) = Binding s
+binding _ = Binding ""
+
 -- State modification
-bindings :: Parser [(String, Ast)]
-bindings = many $ sexpr $ (,) <$> binding <*> lispExpr where
-  binding = (\(Symbol s) -> s) <$> anySymbol
+bindings :: Parser [(Binding, Ast)]
+bindings = many $ sexpr $ (,) <$> toBinding <*> lispExpr where
+  toBinding = binding <$> anySymbol
 
 addBinding :: String -> Parser ()
 addBinding name = Parser c where
   c xs = state (\s -> (((), xs), newState name s)) where
-    newState x [] = [[x]]
-    newState x (frame:prev) = (x : frame) : prev
+    newState x [] = [[Binding x]]
+    newState x (frame:prev) = (Binding x : frame) : prev
 
-pushFrame :: [String] -> Parser ()
+pushFrame :: [Binding] -> Parser ()
 pushFrame names = Parser c where
   c xs = state $ \prev -> (((), xs), names : prev)
 
@@ -101,7 +107,7 @@ funcDefinition = sexpr $ do
   void $ symbol "defn"
   (Symbol name) <- anySymbol
   addBinding name
-  params <- sexpr $ many $ (\(Symbol s) -> s) <$> anySymbol
+  params <- sexpr $ many $ binding <$> anySymbol
   pushFrame params
   impl <- sequence
   popFrame
@@ -118,7 +124,14 @@ reference = do
     addRef name = Parser f where
       f xs = do
         s <- get
-        return $ maybe (FreeReference name, xs) (const (LocalReference name, xs)) $ find (elem name) s
+        return $ maybe (FreeReference name, xs) (const (LocalReference name, xs)) $ lookup name s
+
+lookup :: String -> [[Binding]] -> Maybe [Binding]
+lookup name = find (elemBinding name) where
+  elemBinding _ [] = False
+  elemBinding b (Binding s:_) | b == s = True
+  elemBinding b (Special s:_) | b == s = True
+  elemBinding b (_:xs)                   = elemBinding b xs
 
 -- @todo Won't work? State from c1 is being used in c2
 (<&>) :: Parser a -> Parser b -> Parser b

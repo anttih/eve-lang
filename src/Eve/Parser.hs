@@ -53,7 +53,6 @@ instance Alternative Parser where
           Left (_, rest') | rest == rest' -> runEitherT $ runParser c2 rest
           Left e -> return $ Left e
           Right res -> return $ Right res
-    --f xs = runParser c1 xs <|> runParser c2 xs
 
 instance Functor Parser where
   fmap f checker = Parser c where

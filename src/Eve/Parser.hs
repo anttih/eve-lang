@@ -13,7 +13,7 @@ data Binding = Binding String | Special String deriving (Show)
 
 type Bindings = [[Binding]]
 
-type Syntax a = EitherT String (State Bindings) (a, List LispData)
+type Syntax a = EitherT (String, List LispData) (State Bindings) (a, List LispData)
 
 data Ast = Let [Binding] [Ast] Ast
          | Function [Binding] Ast
@@ -43,9 +43,17 @@ instance Applicative Parser where
   (<*>) = ap
 
 instance Alternative Parser where
-  empty = Parser (\_ -> left "")
+  empty = Parser (\_ -> left ("", Null))
   (<|>) c1 c2 = Parser f where
-    f xs = runParser c1 xs <|> runParser c2 xs
+    f rest = 
+      let syntax = runParser c1 rest in
+      EitherT $ do
+        a <- runEitherT syntax
+        case a of
+          Left (_, rest') | rest == rest' -> runEitherT $ runParser c2 rest
+          Left e -> return $ Left e
+          Right res -> return $ Right res
+    --f xs = runParser c1 xs <|> runParser c2 xs
 
 instance Functor Parser where
   fmap f checker = Parser c where
@@ -83,7 +91,7 @@ popFrame = Parser c where
     pop (_:rest) = rest
 
 lispLet :: Parser Ast
-lispLet = sexpr $ do
+lispLet = do
   void $ symbol "let"
   b <- sexpr bindings
   pushFrame (fst <$> b)
@@ -95,7 +103,7 @@ sequence :: Parser [Ast]
 sequence = many lispExpr
 
 definition :: Parser Ast
-definition = sexpr $ do
+definition = do
   void $ symbol "def"
   (Symbol name) <- anySymbol
   expr <- lispExpr
@@ -103,7 +111,7 @@ definition = sexpr $ do
   return $ Definition name expr
 
 funcDefinition :: Parser Ast
-funcDefinition = sexpr $ do
+funcDefinition = do
   void $ symbol "defn"
   (Symbol name) <- anySymbol
   addBinding name
@@ -114,7 +122,7 @@ funcDefinition = sexpr $ do
   return $ Definition name (Function params (Seq impl))
 
 doBlock :: Parser Ast
-doBlock = Seq <$> sexpr (symbol "do" *> sequence)
+doBlock = Seq <$> (symbol "do" *> sequence)
 
 reference :: Parser Ast
 reference = do
@@ -146,27 +154,27 @@ lookup name = find (elemBinding name) where
 
 anyVal :: Parser LispData
 anyVal = Parser f where
-  f Null = left "Expecting a value, but got nothing"
+  f Null = left ("Expecting a value, but got nothing", Null)
   f (Pair x rest) = return (x, rest)
 
 endSexpr :: Parser ()
 endSexpr = Parser f where
-  f Null = return ((), Null)
-  f (Pair x _) = left $ "Expecting the end of list, but got " ++ show x
+  f Null          = return ((), Null)
+  f (Pair x rest) = left ("Expecting the end of list, but got " ++ show x, rest)
 
 -- Parse values from inside a lisp list (...) with checker `c`. The checker
 -- should consume all of the values inside the list.
 sexpr :: Parser a -> Parser a
 sexpr c = anyVal <&> Parser isSexpr where
-  isSexpr (Pair x rest) = case x of
+  isSexpr orig@(Pair x rest) = case x of
     (Sexpr xs) -> (\(res, _) -> (res, rest)) <$> runParser (c <* endSexpr) xs
-    _ -> left $ "Expecting a list, got " ++ show x
-  isSexpr _ = left ""
+    _ -> left ("Expecting a list, got " ++ show x, orig)
+  isSexpr _ = left ("", Null)
 
 check :: (LispData -> Bool) -> String -> Parser LispData
 check f msg = Parser checker where
-  checker (Pair x rest) = if f x then return (x, rest) else left $ msg ++ ", got " ++ show x
-  checker _ = left "Fail. This should not happen."
+  checker orig@(Pair x rest) = if f x then return (x, rest) else left (msg ++ ", got " ++ show x, orig)
+  checker _ = left ("Fail. This should not happen.", Null)
 
 anySymbol ::  Parser LispData
 anySymbol = anyVal <&> check sym "Expecting any symbol" where
@@ -192,23 +200,26 @@ literal = Literal <$> check val "Expecting a literal" where
   val (Keyword _) = True
   val _ = False
 
+lispForm :: Parser Ast
+lispForm = sexpr $ definition <|> funcDefinition <|> lispLet <|> doBlock
+
 lispExpr :: Parser Ast
-lispExpr = literal <|> definition <|> funcDefinition <|> reference <|> lispLet <|> doBlock
+lispExpr = literal <|> reference <|> lispForm
 
 parse :: Parser LispData -> String -> Either String LispData
 parse c input = case readLispData input of
-  Ok e _ -> either Left (Right . fst) $ evalState (runEitherT (runParser c (Pair e Null))) []
+  Ok e _ -> either (Left . fst) (Right . fst) $ evalState (runEitherT (runParser c (Pair e Null))) []
   Fail -> Left "Parse error"
 
 parseExpr :: String -> Either String Ast
 parseExpr input = case readLispData input of
-  Ok e _ -> either Left (Right . fst) $ evalState (runEitherT (runParser lispExpr (Pair e Null))) []
+  Ok e _ -> either (Left . fst) (Right . fst) $ evalState (runEitherT (runParser lispExpr (Pair e Null))) []
   Fail -> Left "Parse error"
 
 runExprState' :: Parser Ast -> String -> Either String Bindings
 runExprState' checker input = case readLispData input of
   Ok e _ -> case runState (runEitherT (runParser checker (Pair e Null))) [] of
-    (Left m, _) -> Left m
+    (Left (m, _), _) -> Left m
     (Right _, s) -> Right s
   Fail -> Left "Parse error"
 

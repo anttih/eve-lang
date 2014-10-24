@@ -1,6 +1,6 @@
 module Eve.Parser where
 
-import Prelude hiding (concat, sequence, lookup)
+import Prelude hiding (sequence, lookup)
 import Control.Applicative
 import Control.Monad.Trans.Either
 import Control.Monad.State.Strict hiding (sequence)
@@ -123,22 +123,28 @@ funcDefinition = do
 doBlock :: Parser Ast
 doBlock = Seq <$> (symbol "do" *> sequence)
 
+application :: Parser Ast
+application = do
+  fun <- reference
+  args <- some lispExpr
+  return $ Application fun args
+
 reference :: Parser Ast
 reference = do
   (Symbol name) <- anySymbol
-  addRef name where
-    addRef :: String -> Parser Ast
-    addRef name = Parser f where
-      f xs = do
-        s <- get
-        return $ maybe (FreeReference name, xs) (const (LocalReference name, xs)) $ lookup name s
+  getRef name
 
-lookup :: String -> [[Binding]] -> Maybe [Binding]
-lookup name = find (elemBinding name) where
-  elemBinding _ [] = False
-  elemBinding b (Binding s:_) | b == s = True
-  elemBinding b (Special s:_) | b == s = True
-  elemBinding b (_:xs)                   = elemBinding b xs
+getRef :: String -> Parser Ast
+getRef name = Parser f where
+  f xs = do
+    s <- get
+    return $ maybe (FreeReference name, xs) (const (LocalReference name, xs)) $ lookup name s
+
+lookup :: String -> [[Binding]] -> Maybe Binding
+lookup name = find elemBinding . concat where
+  elemBinding (Binding s) | name == s = True
+  elemBinding (Special s) | name == s = True
+  elemBinding _                       = False
 
 -- @todo Won't work? State from c1 is being used in c2
 (<&>) :: Parser a -> Parser b -> Parser b
@@ -200,7 +206,7 @@ literal = Literal <$> check val "Expecting a literal" where
   val _ = False
 
 lispForm :: Parser Ast
-lispForm = sexpr $ definition <|> funcDefinition <|> lispLet <|> doBlock
+lispForm = sexpr $ definition <|> funcDefinition <|> lispLet <|> doBlock <|> application
 
 lispExpr :: Parser Ast
 lispExpr = literal <|> reference <|> lispForm

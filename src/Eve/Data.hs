@@ -1,8 +1,7 @@
 module Eve.Data (
   List(Pair, Null),
   LispData(LispBool, Symbol, Keyword, Str, Number, Sexpr, LispMap),
-  cons,
-  concat
+  cons
   ) where
 
 import Prelude hiding (True, False, foldr, takeWhile, concat)

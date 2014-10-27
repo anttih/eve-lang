@@ -18,4 +18,4 @@ executable eve
   main-is:           Main.hs
   hs-source-dirs:    src
   ghc-options:       -Wall
-  build-depends:     base, transformers, mtl, containers, either==4.3.1, haskeline
+  build-depends:     base, transformers, mtl, containers, either==4.3.1, haskeline, free==4.9

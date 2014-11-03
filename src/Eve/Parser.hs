@@ -146,6 +146,15 @@ lookup name = find elemBinding . concat where
   elemBinding (Special s) | name == s = True
   elemBinding _                       = False
 
+ifExpr :: Parser Ast
+ifExpr = do
+  void $ symbol "if"
+  test <- lispExpr
+  then_ <- lispExpr
+  alt <- lispExpr
+  return $ Alternative test then_ alt
+
+
 -- @todo Won't work? State from c1 is being used in c2
 (<&>) :: Parser a -> Parser b -> Parser b
 (<&>) c1 c2 = Parser f where
@@ -206,7 +215,7 @@ literal = Literal <$> check val "Expecting a literal" where
   val _ = False
 
 lispForm :: Parser Ast
-lispForm = sexpr $ definition <|> funcDefinition <|> lispLet <|> doBlock <|> application
+lispForm = sexpr $ definition <|> funcDefinition <|> lispLet <|> doBlock  <|> ifExpr <|> application
 
 lispExpr :: Parser Ast
 lispExpr = literal <|> reference <|> lispForm

@@ -22,6 +22,11 @@ run (Free (Refer v n))    = modify (\(_, env) -> (refer v env, env)) >> run n
 run (Free (Def name n))   = modify updateFrame >> run n where
   updateFrame (v, [])       = (v, [Map.singleton name v])
   updateFrame (v, frame:xs) = (v, Map.insert name v frame : xs)
+run (Free (Test then' alt)) = do
+  test <- liftM fst get
+  case test of
+    (LispBool a) -> run (if a then then' else alt)
+    _ -> liftIO (throwIO (userError "Non-boolean value in if expression"))
 run (Free Halt)           = get >>= liftIO . print . fst
 run (Pure _)              = liftIO (throwIO (userError "Fail"))
 run _                     = liftIO (throwIO (userError "Not implemented"))

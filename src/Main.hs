@@ -1,20 +1,28 @@
 module Main where
 
-import Eve.Parser (parseExpr)
+import Data.Functor
+import Eve.Parser (parseExpr, Bindings, Binding(..))
 import Eve.Compiler
 import Eve.VM (exec)
 import System.Console.Haskeline
+import Eve.Data
+import qualified Data.Map.Strict as Map
+
+initialEnv :: [Map.Map String LispData]
+initialEnv = [Map.fromList [("+", Function $ Fn2 plus)]]
+
+bindings :: Bindings
+bindings = (fmap Binding . Map.keys) <$> initialEnv
 
 parse :: String -> String
-parse expr = case parseExpr expr of
+parse expr = case parseExpr bindings expr of
   Left e    -> e
   Right ast -> show ast
 
-
 eval :: String -> IO ()
-eval expr = case parseExpr expr of
+eval expr = case parseExpr bindings expr of
   Left e -> print e
-  Right ast -> exec (compile ast)
+  Right ast -> exec initialEnv (compile ast)
 
 main :: IO ()
 main = runInputT defaultSettings loop where
@@ -25,3 +33,8 @@ main = runInputT defaultSettings loop where
       Nothing -> return ()
       Just ex -> do outputStrLn $ parse ex
                     loop
+
+plus :: LispData -> LispData -> LispData
+plus (Number x) (Number y) = Number (x + y)
+plus _ _ = error "Plus expects two numbers"
+

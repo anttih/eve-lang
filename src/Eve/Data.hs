@@ -1,10 +1,11 @@
 module Eve.Data (
   List(Pair, Null),
-  LispData(LispBool, Symbol, Keyword, Str, Number, Sexpr, LispMap),
+  LispData(LispBool, Symbol, Keyword, Str, Number, Sexpr, LispMap, Function),
+  Primitive(..),
   cons
   ) where
 
-import Prelude hiding (True, False, foldr, takeWhile, concat)
+import Prelude hiding (foldr, takeWhile, concat)
 import Control.Applicative
 import Control.Monad (ap)
 import Data.Foldable (Foldable(foldr))
@@ -14,13 +15,32 @@ import qualified Data.Map as M
 data List a = Pair a (List a) | Null deriving (Show, Ord, Eq)
 
 data LispData = Symbol String
-             | LispBool Bool
-             | Keyword String
-             | Str String
-             | Number Int
-             | Sexpr (List LispData)
-             | LispMap (M.Map LispData LispData)
-             deriving (Show, Ord, Eq)
+              | LispBool Bool
+              | Keyword String
+              | Str String
+              | Number Int
+              | Sexpr (List LispData)
+              | LispMap (M.Map LispData LispData)
+              | Function Primitive
+              deriving (Show, Ord, Eq)
+
+data Primitive = Fn1 (LispData -> LispData) 
+             | Fn2 (LispData -> LispData -> LispData)
+             | Fn3 (LispData -> LispData -> LispData -> LispData)
+             | Fn4 (LispData -> LispData -> LispData -> LispData -> LispData)
+             | Fn5 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
+             | Fn6 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
+             | Fn7 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
+             | Fn8 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
+
+instance Show Primitive where
+  show _ = "Primitive"
+
+instance Eq Primitive where
+  (==) _ _ = False
+
+instance Ord Primitive where
+  compare _ _ = LT
 
 cons ::  a -> List a -> List a
 cons = Pair

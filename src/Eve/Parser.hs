@@ -6,7 +6,7 @@ import Control.Monad.Trans.Either
 import Control.Monad.State.Strict hiding (sequence)
 import Data.List (find)
 
-import Eve.Data
+import Eve.Data hiding (Function)
 import Eve.Reader
 
 data Binding = Binding String | Special String deriving (Show)
@@ -225,9 +225,9 @@ parse c input = case readLispData input of
   Ok e _ -> either (Left . fst) (Right . fst) $ evalState (runEitherT (runParser c (Pair e Null))) []
   Fail -> Left "Parse error"
 
-parseExpr :: String -> Either String Ast
-parseExpr input = case readLispData input of
-  Ok e _ -> either (Left . fst) (Right . fst) $ evalState (runEitherT (runParser lispExpr (Pair e Null))) []
+parseExpr :: Bindings -> String -> Either String Ast
+parseExpr env input = case readLispData input of
+  Ok e _ -> either (Left . fst) (Right . fst) $ evalState (runEitherT (runParser lispExpr (Pair e Null))) env
   Fail -> Left "Parse error"
 
 runExprState' :: Parser Ast -> String -> Either String Bindings

@@ -22,7 +22,19 @@ data LispData = Symbol String
               | Sexpr (List LispData)
               | LispMap (M.Map LispData LispData)
               | Function Primitive
-              deriving (Show, Ord, Eq)
+              deriving (Ord, Eq)
+
+instance Show LispData where
+  show (Symbol name) = name
+  show (LispBool True) = "true"
+  show (LispBool False) = "false"
+  show (Keyword name) = ":" ++ name
+  show (Str s) = show s
+  show (Number n) = show n
+  show (Sexpr Null) = "()"
+  show (Sexpr (Pair f rest)) = "(" ++ show f ++ show rest ++ ")"
+  show (LispMap m) = show m
+  show (Function f) = show f
 
 data Primitive = Fn1 (LispData -> LispData) 
              | Fn2 (LispData -> LispData -> LispData)
@@ -34,7 +46,7 @@ data Primitive = Fn1 (LispData -> LispData)
              | Fn8 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
 
 instance Show Primitive where
-  show _ = "Primitive"
+  show _ = "#<primitive>"
 
 instance Eq Primitive where
   (==) _ _ = False

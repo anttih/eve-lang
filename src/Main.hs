@@ -9,7 +9,8 @@ import Eve.Data
 import qualified Data.Map.Strict as Map
 
 initialEnv :: [Map.Map String LispData]
-initialEnv = [Map.fromList [("+", Function $ Fn2 plus)]]
+initialEnv = [Map.fromList [("+", Function $ Fn2 plus)
+                           ,("list", Function $ NAry list)]]
 
 bindings :: Bindings
 bindings = (fmap Binding . Map.keys) <$> initialEnv
@@ -38,3 +39,5 @@ plus :: LispData -> LispData -> LispData
 plus (Number x) (Number y) = Number (x + y)
 plus _ _ = error "Plus expects two numbers"
 
+list :: [LispData] -> LispData
+list xs = Sexpr $ foldr cons Null xs where

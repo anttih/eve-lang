@@ -12,7 +12,12 @@ import Data.Foldable (Foldable(foldr))
 import Data.Traversable
 import qualified Data.Map as M
 
-data List a = Pair a (List a) | Null deriving (Show, Ord, Eq)
+data List a = Pair a (List a) | Null deriving (Ord, Eq)
+
+instance (Show a) => Show (List a) where
+  show Null = ""
+  show (Pair a Null) = show a
+  show (Pair a xs) = show a ++ " " ++ show xs
 
 data LispData = Symbol String
               | LispBool Bool
@@ -32,18 +37,19 @@ instance Show LispData where
   show (Str s) = show s
   show (Number n) = show n
   show (Sexpr Null) = "()"
-  show (Sexpr (Pair f rest)) = "(" ++ show f ++ show rest ++ ")"
+  show (Sexpr pair) = "(" ++ show pair ++ ")"
   show (LispMap m) = show m
   show (Function f) = show f
 
-data Primitive = Fn1 (LispData -> LispData) 
-             | Fn2 (LispData -> LispData -> LispData)
-             | Fn3 (LispData -> LispData -> LispData -> LispData)
-             | Fn4 (LispData -> LispData -> LispData -> LispData -> LispData)
-             | Fn5 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
-             | Fn6 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
-             | Fn7 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
-             | Fn8 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
+data Primitive = NAry ([LispData] -> LispData)
+               | Fn1 (LispData -> LispData) 
+               | Fn2 (LispData -> LispData -> LispData)
+               | Fn3 (LispData -> LispData -> LispData -> LispData)
+               | Fn4 (LispData -> LispData -> LispData -> LispData -> LispData)
+               | Fn5 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
+               | Fn6 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
+               | Fn7 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
+               | Fn8 (LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData -> LispData)
 
 instance Show Primitive where
   show _ = "#<primitive>"

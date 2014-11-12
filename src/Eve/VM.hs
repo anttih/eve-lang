@@ -40,6 +40,7 @@ run (Pure _)              = liftIO (throwIO (userError "Fail"))
 run _                     = liftIO (throwIO (userError "Not implemented"))
 
 apply :: LispData -> [LispData] -> LispData
+apply (Function (NAry f)) xs = f xs
 apply (Function (Fn1 f)) (x1:[]) = f x1
 apply (Function (Fn2 f)) (x1:x2:[]) = f x1 x2
 apply (Function (Fn3 f)) (x1:x2:x3:[]) = f x1 x2 x3

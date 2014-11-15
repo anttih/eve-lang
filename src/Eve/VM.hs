@@ -12,13 +12,12 @@ import Data.Functor
 import qualified Data.Map.Strict as Map
 
 import Eve.Data
-import Eve.Compiler
 
 data StackFrame = StackFrame [Map.Map String LispData] [LispData] StackFrame | EmptyStack
 
 type VM = StateT (LispData, [Map.Map String LispData], [LispData], StackFrame) IO ()
 
-run :: Free OpCodeF a -> VM
+run :: OpCode () -> VM
 run (Free (Constant v n)) = modify (\(_, env, f, s) -> (v, env, f, s)) >> run n
 run (Free (Refer v n))    = modify (\(_, env, f, s) -> (refer v env, env, f, s)) >> run n
 run (Free (Def name n))   = modify updateFrame >> run n where
@@ -35,6 +34,7 @@ run (Free (Frame ret n))  = modify (\(a, env, f, s) -> (a, env, f, StackFrame en
 run (Free Return)         = modify (\(a, env, f, s) -> case s of
                                                        (StackFrame env' f' s') -> (a, env', f', s')
                                                        EmptyStack              -> (a, env, f, s))
+run (Free (Close names body n)) = modify (\(_, env, f, s) -> (Closure names body env, env, f, s)) >> run n
 run (Free Halt)           = get >>= liftIO . print . (\(a, _, _, _) -> a)
 run (Pure _)              = liftIO (throwIO (userError "Fail"))
 run _                     = liftIO (throwIO (userError "Not implemented"))

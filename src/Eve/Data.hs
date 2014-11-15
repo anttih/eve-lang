@@ -1,13 +1,16 @@
-module Eve.Data (
-  List(Pair, Null),
-  LispData(LispBool, Symbol, Keyword, Str, Number, Sexpr, LispMap, Function),
-  Primitive(..),
-  cons
+module Eve.Data
+  ( List(Pair, Null)
+  , LispData(..)
+  , Primitive(..)
+  , cons
+  , OpCode
+  , OpCodeF(..)
   ) where
 
 import Prelude hiding (foldr, takeWhile, concat)
 import Control.Applicative
 import Control.Monad (ap)
+import Control.Monad.Free
 import Data.Foldable (Foldable(foldr))
 import Data.Traversable
 import qualified Data.Map as M
@@ -27,6 +30,7 @@ data LispData = Symbol String
               | Sexpr (List LispData)
               | LispMap (M.Map LispData LispData)
               | Function Primitive
+              | Closure [String] (OpCode ()) [M.Map String LispData]
               deriving (Ord, Eq)
 
 instance Show LispData where
@@ -40,6 +44,7 @@ instance Show LispData where
   show (Sexpr pair) = "(" ++ show pair ++ ")"
   show (LispMap m) = show m
   show (Function f) = show f
+  show Closure{} = "#<closure>"
 
 data Primitive = NAry ([LispData] -> LispData)
                | Fn1 (LispData -> LispData) 
@@ -87,8 +92,31 @@ instance Traversable List where
   traverse f = foldr cons_f (pure Null) where
     cons_f x ys = Pair <$> f x <*> ys
 
--- takeWhile :: (a -> Bool) -> List a -> List a
--- takeWhile _ Null = Null
--- takeWhile f (Pair x xs)
---   | f x       = Pair x (takeWhile f xs)
---   | otherwise = Null
+-- Opcodes for the VM
+data OpCodeF next = Refer String next
+                  | Constant LispData next
+                  | Assign String next
+                  | Close [String] next next
+                  | Def String next
+                  | Test next next
+                  | Apply
+                  | Return
+                  | Frame next next
+                  | Argument next
+                  | Halt deriving (Show, Ord, Eq)
+
+type OpCode a = Free OpCodeF a
+
+instance Functor OpCodeF where
+  fmap f (Refer v next) = Refer v (f next)
+  fmap f (Constant v next) = Constant v (f next)
+  fmap f (Assign n next) = Assign n (f next)
+  fmap f (Close params body next) = Close params (f body) (f next)
+  fmap f (Def n next) = Def n (f next)
+  fmap f (Test then' alt) =  Test (f then') (f alt)
+  fmap _ Apply = Apply
+  fmap _ Return = Return
+  fmap f (Frame next next') = Frame (f next) (f next')
+  fmap f (Argument next) = Argument (f next)
+  fmap _ Halt = Halt
+

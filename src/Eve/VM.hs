@@ -17,7 +17,7 @@ data StackFrame = StackFrame [Map.Map String LispData] [LispData] StackFrame | E
 
 type VM = StateT (LispData, [Map.Map String LispData], [LispData], StackFrame) IO ()
 
-run :: OpCode () -> VM
+run :: OpCode -> VM
 run (Free (Constant v n)) = modify (\(_, env, f, s) -> (v, env, f, s)) >> run n
 run (Free (Refer v n))    = modify (\(_, env, f, s) -> (refer v env, env, f, s)) >> run n
 run (Free (Def name n))   = modify updateFrame >> run n where
@@ -29,7 +29,12 @@ run (Free (Test then' alt)) = do
     (LispBool a) -> run (if a then then' else alt)
     _ -> liftIO (throwIO (userError "Non-boolean value in if expression"))
 run (Free (Argument n))   = modify (\(a, env, f, s) -> (a, env, a : f, s)) >> run n
-run (Free Apply)          = modify (\(a, env, f, s) -> (apply a f, env, f, s)) >> run (Free Return)
+run (Free Apply)          = do
+  (a, env, f, s) <- get
+  case a of
+    (Function fn) -> put (apply fn f, env, f, s) >> run (Free Return)
+    (Closure args body env') -> put (a, Map.fromList (zip args f) : env', [], s) >> run body
+    _ -> liftIO (throwIO (userError "Cannot apply"))
 run (Free (Frame ret n))  = modify (\(a, env, f, s) -> (a, env, f, StackFrame env f s)) >> run n >> run ret
 run (Free Return)         = modify (\(a, env, f, s) -> case s of
                                                        (StackFrame env' f' s') -> (a, env', f', s')
@@ -39,15 +44,15 @@ run (Free Halt)           = get >>= liftIO . print . (\(a, _, _, _) -> a)
 run (Pure _)              = liftIO (throwIO (userError "Fail"))
 run _                     = liftIO (throwIO (userError "Not implemented"))
 
-apply :: LispData -> [LispData] -> LispData
-apply (Function (NAry f)) xs = f xs
-apply (Function (Fn1 f)) (x1:[]) = f x1
-apply (Function (Fn2 f)) (x1:x2:[]) = f x1 x2
-apply (Function (Fn3 f)) (x1:x2:x3:[]) = f x1 x2 x3
-apply (Function (Fn4 f)) (x1:x2:x3:x4:[]) = f x1 x2 x3 x4
-apply (Function (Fn5 f)) (x1:x2:x3:x4:x5:[]) = f x1 x2 x3 x4 x5
-apply (Function (Fn6 f)) (x1:x2:x3:x4:x5:x6:[]) = f x1 x2 x3 x4 x5 x6
-apply (Function (Fn7 f)) (x1:x2:x3:x4:x5:x6:x7:[]) = f x1 x2 x3 x4 x5 x6 x7
+apply :: Primitive -> [LispData] -> LispData
+apply (NAry f) xs = f xs
+apply (Fn1 f) (x1:[]) = f x1
+apply (Fn2 f) (x1:x2:[]) = f x1 x2
+apply (Fn3 f) (x1:x2:x3:[]) = f x1 x2 x3
+apply (Fn4 f) (x1:x2:x3:x4:[]) = f x1 x2 x3 x4
+apply (Fn5 f) (x1:x2:x3:x4:x5:[]) = f x1 x2 x3 x4 x5
+apply (Fn6 f) (x1:x2:x3:x4:x5:x6:[]) = f x1 x2 x3 x4 x5 x6
+apply (Fn7 f) (x1:x2:x3:x4:x5:x6:x7:[]) = f x1 x2 x3 x4 x5 x6 x7
 apply _ _ = error "Cannot apply"
 
 -- This is unsafe, but using this for LocalReferences should always succeed

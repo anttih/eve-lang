@@ -30,7 +30,7 @@ data LispData = Symbol String
               | Sexpr (List LispData)
               | LispMap (M.Map LispData LispData)
               | Function Primitive
-              | Closure [String] (OpCode ()) [M.Map String LispData]
+              | Closure [String] OpCode [M.Map String LispData]
               deriving (Ord, Eq)
 
 instance Show LispData where
@@ -105,7 +105,7 @@ data OpCodeF next = Refer String next
                   | Argument next
                   | Halt deriving (Show, Ord, Eq)
 
-type OpCode a = Free OpCodeF a
+type OpCode = Free OpCodeF ()
 
 instance Functor OpCodeF where
   fmap f (Refer v next) = Refer v (f next)

@@ -103,6 +103,11 @@ lispLet = do
 sequence :: Parser [Ast]
 sequence = many lispExpr
 
+lispFn :: Parser Ast
+lispFn = do
+  void $ symbol "fn"
+  func
+
 definition :: Parser Ast
 definition = do
   void $ symbol "def"
@@ -111,16 +116,21 @@ definition = do
   addBinding name
   return $ Definition name expr
 
+func :: Parser Ast
+func = do
+  params <- sexpr $ many $ binding <$> anySymbol
+  pushFrame params
+  impl <- sequence
+  popFrame
+  return $ Function params (Seq impl)
+
 funcDefinition :: Parser Ast
 funcDefinition = do
   void $ symbol "defn"
   (Symbol name) <- anySymbol
   addBinding name
-  params <- sexpr $ many $ binding <$> anySymbol
-  pushFrame params
-  impl <- sequence
-  popFrame
-  return $ Definition name (Function params (Seq impl))
+  function <- func
+  return $ Definition name function
 
 doBlock :: Parser Ast
 doBlock = Seq <$> (symbol "do" *> sequence)
@@ -217,7 +227,7 @@ literal = Literal <$> check val "Expecting a literal" where
   val _ = False
 
 lispForm :: Parser Ast
-lispForm = sexpr $ definition <|> funcDefinition <|> lispLet <|> doBlock  <|> ifExpr <|> application
+lispForm = sexpr $ definition <|> funcDefinition <|> lispFn <|> lispLet <|> doBlock <|> ifExpr <|> application
 
 lispExpr :: Parser Ast
 lispExpr = literal <|> reference <|> lispForm

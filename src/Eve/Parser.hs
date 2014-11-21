@@ -15,12 +15,14 @@ type Bindings = [[Binding]]
 
 type Syntax a = EitherT (String, List LispData) (State Bindings) (a, List LispData)
 
+type Reference = String
+
 data Ast = Let [Binding] [Ast] Ast
          | Function [Binding] Ast
          | Application Ast [Ast]
          | Definition String Ast
-         | LocalReference String
-         | FreeReference String
+         | LocalReference Reference
+         | FreeReference Reference
          | Literal LispData
          | Alternative Ast Ast Ast
          | Seq [Ast] deriving (Show)

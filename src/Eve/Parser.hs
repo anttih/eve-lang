@@ -47,7 +47,7 @@ instance Applicative Parser where
 instance Alternative Parser where
   empty = Parser (\_ -> left ("", Null))
   (<|>) c1 c2 = Parser f where
-    f rest = 
+    f rest =
       let syntax = runParser c1 rest in
       EitherT $ do
         a <- runEitherT syntax
@@ -227,7 +227,14 @@ literal = Literal <$> check val "Expecting a literal" where
   val _ = False
 
 lispForm :: Parser Ast
-lispForm = sexpr $ definition <|> funcDefinition <|> lispFn <|> lispLet <|> doBlock <|> ifExpr <|> application
+lispForm = sexpr
+  $ definition
+  <|> funcDefinition
+  <|> lispFn
+  <|> lispLet
+  <|> doBlock
+  <|> ifExpr
+  <|> application
 
 lispExpr :: Parser Ast
 lispExpr = literal <|> reference <|> lispForm
